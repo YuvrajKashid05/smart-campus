@@ -6,7 +6,7 @@ export default function ProtectedRoute({ children, roles }) {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-lg">
+      <div className="flex min-h-screen items-center justify-center">
         Loading...
       </div>
     );

@@ -30,7 +30,7 @@ export function AuthProvider({ children }) {
       try {
         const { data } = await client.get("/api/users/me");
         setUser(data.user);
-      } catch (error) {
+      } catch {
         logout();
       } finally {
         setLoading(false);
@@ -41,13 +41,7 @@ export function AuthProvider({ children }) {
   }, [token]);
 
   const value = useMemo(
-    () => ({
-      token,
-      user,
-      loading,
-      login,
-      logout,
-    }),
+    () => ({ token, user, loading, login, logout }),
     [token, user, loading],
   );
 
