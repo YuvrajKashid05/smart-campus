@@ -1,116 +1,233 @@
-// controllers/auth.js
 import bcrypt from "bcryptjs";
-import { z } from "zod";
+import * as z from "zod";
 import User from "../models/user.model.js";
 import { signToken } from "../utils/jwt.js";
 
-/* -------------------- ZOD VALIDATION -------------------- */
-const registerSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  email: z.email("Invalid email"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+const normalizeText = (value) =>
+  typeof value === "string" ? value.trim() : "";
 
-  role: z.enum(["STUDENT", "FACULTY", "ADMIN"]).default("STUDENT"),
-  dept: z.string().optional(),
-  rollNo: z.string().optional(),
-  employeeId: z.string().optional()
+const normalizeUpper = (value) => normalizeText(value).toUpperCase();
+const normalizeLower = (value) => normalizeText(value).toLowerCase();
+
+const buildUserResponse = (user) => ({
+  id: user._id,
+  name: user.name,
+  email: user.email,
+  role: user.role,
+  mobileNumber: user.mobileNumber,
+  dept: user.dept,
+  section: user.section,
+  semester: user.semester,
+  rollNo: user.rollNo,
+  employeeId: user.employeeId,
 });
 
-// Login validation
+const registerSchema = z
+  .object({
+    name: z.string().trim().min(2, "Full name must be at least 2 characters"),
+
+    // Zod 4 style: avoid z.string().email()
+    email: z.string().trim().pipe(z.email("Invalid email")),
+
+    password: z.string().min(6, "Password must be at least 6 characters"),
+    role: z.enum(["STUDENT", "FACULTY", "ADMIN"]).default("STUDENT"),
+
+    mobileNumber: z.string().trim().optional(),
+    dept: z.string().trim().optional(),
+    section: z.string().trim().optional(),
+    semester: z.coerce.number().int().min(1).max(8).optional(),
+    rollNo: z.string().trim().optional(),
+    employeeId: z.string().trim().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.role === "STUDENT") {
+      if (!data.mobileNumber || data.mobileNumber.length < 10) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["mobileNumber"],
+          message: "Mobile number is required for students",
+        });
+      }
+
+      if (!data.dept || data.dept.length < 2) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["dept"],
+          message: "Department is required for students",
+        });
+      }
+
+      if (!data.section || data.section.length < 1) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["section"],
+          message: "Section is required for students",
+        });
+      }
+
+      if (data.semester == null) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["semester"],
+          message: "Semester is required for students",
+        });
+      }
+
+      if (!data.rollNo || data.rollNo.length < 1) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["rollNo"],
+          message: "Roll number is required for students",
+        });
+      }
+    }
+
+    if (data.role === "FACULTY" && (!data.employeeId || data.employeeId.length < 1)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["employeeId"],
+        message: "Employee ID is required for faculty",
+      });
+    }
+  });
+
 const loginSchema = z.object({
-  email: z.email("Invalid email"),
-  password: z.string().min(1, "Password is required")
+  // Zod 4 style: avoid z.string().email()
+  email: z.string().trim().pipe(z.email("Invalid email")),
+  password: z.string().min(1, "Password is required"),
 });
 
-/* -------------------- REGISTER -------------------- */
 export async function register(req, res) {
   try {
+    const parsed = registerSchema.safeParse(req.body);
 
-    const result = registerSchema.safeParse(req.body);
-    if (!result.success) {
+    if (!parsed.success) {
       return res.status(400).json({
         ok: false,
-        error: result.error.flatten()
+        error: z.treeifyError(parsed.error), // Zod 4 replacement for .flatten()
       });
     }
 
-    const { name, email, password, role, dept, rollNo, employeeId } = result.data;
+    const data = parsed.data;
 
-    const already = await User.findOne({ email });
-    if (already) {
-      return res.status(409).json({ ok: false, error: "Email already registered" });
+    const normalizedEmail = normalizeLower(data.email);
+    const normalizedDept = normalizeUpper(data.dept);
+    const normalizedSection = normalizeUpper(data.section);
+    const normalizedRollNo = normalizeUpper(data.rollNo);
+    const normalizedEmployeeId = normalizeUpper(data.employeeId);
+
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (existingUser) {
+      return res.status(409).json({
+        ok: false,
+        error: "Email already registered",
+      });
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    if (data.role === "STUDENT") {
+      const existingRoll = await User.findOne({
+        role: "STUDENT",
+        dept: normalizedDept,
+        section: normalizedSection,
+        rollNo: normalizedRollNo,
+      });
 
+      if (existingRoll) {
+        return res.status(409).json({
+          ok: false,
+          error: "Roll number already exists in this department and section",
+        });
+      }
+    }
+
+    const passwordHash = await bcrypt.hash(data.password, 10);
 
     const user = await User.create({
-      name,
-      email,
+      name: normalizeText(data.name),
+      email: normalizedEmail,
       passwordHash,
-      role,
-      dept: dept ?? "",
-      rollNo: rollNo ?? "",
-      employeeId: employeeId ?? ""
+      role: data.role,
+      mobileNumber: normalizeText(data.mobileNumber),
+      dept: normalizedDept,
+      section: normalizedSection,
+      semester: data.semester,
+      rollNo: normalizedRollNo,
+      employeeId: normalizedEmployeeId,
     });
 
-    const token = signToken({ sub: user._id.toString(), role: user.role });
+    const token = signToken({
+      sub: user._id.toString(),
+      role: user.role,
+    });
 
     return res.status(201).json({
       ok: true,
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role
-      }
+      user: buildUserResponse(user),
     });
   } catch (err) {
     console.error("REGISTER ERROR:", err);
-    return res.status(500).json({ ok: false, error: "Server error" });
-  }
-}
 
-/* -------------------- LOGIN -------------------- */
-export async function login(req, res) {
-  try {
-    
-    const result = loginSchema.safeParse(req.body);
-    if (!result.success) {
-      return res.status(400).json({
+    if (err?.code === 11000) {
+      return res.status(409).json({
         ok: false,
-        error: result.error.flatten()
+        error: "Duplicate user data found",
       });
     }
 
-    const { email, password } = result.data;
+    return res.status(500).json({
+      ok: false,
+      error: "Server error",
+    });
+  }
+}
 
-    const user = await User.findOne({ email });
+export async function login(req, res) {
+  try {
+    const parsed = loginSchema.safeParse(req.body);
 
+    if (!parsed.success) {
+      return res.status(400).json({
+        ok: false,
+        error: z.treeifyError(parsed.error), // Zod 4 replacement
+      });
+    }
+
+    const { email, password } = parsed.data;
+    const normalizedEmail = normalizeLower(email);
+
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user || user.isActive === false) {
-      return res.status(401).json({ ok: false, error: "Invalid credentials" });
+      return res.status(401).json({
+        ok: false,
+        error: "Invalid credentials",
+      });
     }
 
-    const passwordOk = await bcrypt.compare(password, user.passwordHash);
-    if (!passwordOk) {
-      return res.status(401).json({ ok: false, error: "Invalid credentials" });
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        ok: false,
+        error: "Invalid credentials",
+      });
     }
 
-    const token = signToken({ sub: user._id.toString(), role: user.role });
+    const token = signToken({
+      sub: user._id.toString(),
+      role: user.role,
+    });
 
-    return res.json({
+    return res.status(200).json({
       ok: true,
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role
-      }
+      user: buildUserResponse(user),
     });
   } catch (err) {
     console.error("LOGIN ERROR:", err);
-    return res.status(500).json({ ok: false, error: "Server error" });
+
+    return res.status(500).json({
+      ok: false,
+      error: "Server error",
+    });
   }
 }

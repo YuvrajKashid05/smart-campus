@@ -6,10 +6,12 @@ import connectDB from "./config/db.js";
 
 // routes
 import aiRoutes from "./routes/ai.routes.js";
+import announcementRoutes from "./routes/announcement.routes.js";
 import attendanceRoutes from "./routes/attendance.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import complaintRoutes from "./routes/complaint.routes.js";
 import noticeRoutes from "./routes/notice.routes.js";
+import timetableRoutes from "./routes/timetable.routes.js";
 import userRoutes from "./routes/user.routes.js";
 
 dotenv.config();
@@ -29,8 +31,10 @@ app.get("/", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/notices", noticeRoutes);
+app.use("/api/announcements", announcementRoutes);
 app.use("/api/complaints", complaintRoutes);
 app.use("/api/attendance", attendanceRoutes);
+app.use("/api/timetables", timetableRoutes);
 app.use("/api/ai", aiRoutes);
 
 // 404 handler
