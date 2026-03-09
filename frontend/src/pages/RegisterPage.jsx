@@ -1,172 +1,238 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import client from "../api/client";
-import { useAuth } from "../context/AuthContext";
+import { AuthContext } from "../context/AuthContext";
 
-const initialForm = {
-  name: "",
-  email: "",
-  password: "",
-  role: "STUDENT",
-  mobileNumber: "",
-  dept: "",
-  section: "",
-  semester: 1,
-  rollNo: "",
-  employeeId: "",
-};
-
-export default function RegisterPage() {
-  const navigate = useNavigate();
-  const { login } = useAuth();
-
-  const [form, setForm] = useState(initialForm);
+const RegisterPage = () => {
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    role: "STUDENT",
+    department: "",
+    semester: "1",
+    section: "A",
+  });
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { register } = useContext(AuthContext);
+  const navigate = useNavigate();
 
-  async function handleSubmit(e) {
+  const departments = [
+    "Computer Science",
+    "Electrical Engineering",
+    "Mechanical Engineering",
+    "Civil Engineering",
+    "Information Technology",
+  ];
+
+  const roles = ["STUDENT", "FACULTY"];
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
+
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match");
+      setLoading(false);
+      return;
+    }
 
     try {
-      const payload = {
-        ...form,
-        semester: form.role === "STUDENT" ? Number(form.semester) : undefined,
-      };
+      const result = await register({
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        password: formData.password,
+        role: formData.role,
+        department: formData.department || undefined,
+        semester: formData.role === "STUDENT" ? formData.semester : undefined,
+        section: formData.role === "STUDENT" ? formData.section : undefined,
+      });
 
-      const { data } = await client.post("/api/auth/register", payload);
-      login(data.token, data.user);
-      navigate("/");
+      if (result.success) {
+        navigate("/login", {
+          replace: true,
+          state: { message: "Registration successful! Please log in." },
+        });
+      } else {
+        setError(result.error || "Registration failed");
+      }
     } catch (err) {
-      setError(
-        err?.response?.data?.error ||
-          err?.response?.data?.error?.properties?.mobileNumber?.errors?.[0] ||
-          "Registration failed",
-      );
+      setError("An error occurred during registration");
+    } finally {
+      setLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-      <div className="w-full max-w-3xl rounded-2xl bg-white p-8 shadow-lg">
-        <h1 className="mb-2 text-4xl font-bold">Register</h1>
-        <p className="mb-6 text-slate-500">Create your Smart Campus account</p>
+    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-50 to-blue-100 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8 bg-white rounded-lg shadow-xl p-8">
+        {/* Header */}
+        <div className="text-center">
+          <div className="flex justify-center">
+            <div className="text-4xl">🎓</div>
+          </div>
+          <h2 className="mt-4 text-3xl font-extrabold text-gray-900">
+            Smart Campus
+          </h2>
+          <p className="mt-2 text-sm text-gray-600">Create your account</p>
+        </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="grid grid-cols-1 gap-4 md:grid-cols-2"
-        >
+        {/* Error Message */}
+        {error && (
+          <div className="rounded-lg bg-red-50 border border-red-200 p-4">
+            <p className="text-sm font-medium text-red-800">{error}</p>
+          </div>
+        )}
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Name Fields */}
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              type="text"
+              name="firstName"
+              value={formData.firstName}
+              onChange={handleInputChange}
+              placeholder="First Name"
+              required
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+            />
+            <input
+              type="text"
+              name="lastName"
+              value={formData.lastName}
+              onChange={handleInputChange}
+              placeholder="Last Name"
+              required
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+            />
+          </div>
+
+          {/* Email */}
           <input
-            className="rounded-xl border px-4 py-3"
-            placeholder="Full name"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            type="email"
+            name="email"
+            value={formData.email}
+            onChange={handleInputChange}
+            placeholder="Email Address"
+            required
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
           />
-          <input
-            className="rounded-xl border px-4 py-3"
-            placeholder="Email"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-          />
-          <input
-            className="rounded-xl border px-4 py-3"
-            type="password"
-            placeholder="Password"
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-          />
+
+          {/* Role */}
           <select
-            className="rounded-xl border px-4 py-3"
-            value={form.role}
-            onChange={(e) => setForm({ ...form, role: e.target.value })}
+            name="role"
+            value={formData.role}
+            onChange={handleInputChange}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
           >
-            <option value="STUDENT">STUDENT</option>
-            <option value="FACULTY">FACULTY</option>
-            <option value="ADMIN">ADMIN</option>
+            {roles.map((role) => (
+              <option key={role} value={role}>
+                {role === "STUDENT" ? "Student" : "Faculty"}
+              </option>
+            ))}
           </select>
 
-          {form.role === "STUDENT" && (
-            <>
-              <input
-                className="rounded-xl border px-4 py-3"
-                placeholder="Mobile Number"
-                value={form.mobileNumber}
-                onChange={(e) =>
-                  setForm({ ...form, mobileNumber: e.target.value })
-                }
-              />
-              <input
-                className="rounded-xl border px-4 py-3"
-                placeholder="Department"
-                value={form.dept}
-                onChange={(e) => setForm({ ...form, dept: e.target.value })}
-              />
-              <input
-                className="rounded-xl border px-4 py-3"
-                type="number"
-                placeholder="Semester"
-                value={form.semester}
-                onChange={(e) => setForm({ ...form, semester: e.target.value })}
-              />
-              <input
-                className="rounded-xl border px-4 py-3"
-                placeholder="Section"
-                value={form.section}
-                onChange={(e) => setForm({ ...form, section: e.target.value })}
-              />
-              <input
-                className="rounded-xl border px-4 py-3 md:col-span-2"
-                placeholder="Roll Number"
-                value={form.rollNo}
-                onChange={(e) => setForm({ ...form, rollNo: e.target.value })}
-              />
-            </>
-          )}
+          {/* Department */}
+          <select
+            name="department"
+            value={formData.department}
+            onChange={handleInputChange}
+            required
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+          >
+            <option value="">Select Department</option>
+            {departments.map((dept) => (
+              <option key={dept} value={dept}>
+                {dept}
+              </option>
+            ))}
+          </select>
 
-          {form.role === "FACULTY" && (
-            <>
-              <input
-                className="rounded-xl border px-4 py-3"
-                placeholder="Department"
-                value={form.dept}
-                onChange={(e) => setForm({ ...form, dept: e.target.value })}
-              />
-              <input
-                className="rounded-xl border px-4 py-3"
-                placeholder="Employee ID"
-                value={form.employeeId}
-                onChange={(e) =>
-                  setForm({ ...form, employeeId: e.target.value })
-                }
-              />
-            </>
-          )}
-
-          {form.role === "ADMIN" && (
-            <input
-              className="rounded-xl border px-4 py-3 md:col-span-2"
-              placeholder="Department (optional)"
-              value={form.dept}
-              onChange={(e) => setForm({ ...form, dept: e.target.value })}
-            />
-          )}
-
-          {error && (
-            <div className="rounded-xl bg-red-50 px-4 py-3 text-red-600 md:col-span-2">
-              {String(error)}
+          {/* Semester (Student only) */}
+          {formData.role === "STUDENT" && (
+            <div className="grid grid-cols-2 gap-3">
+              <select
+                name="semester"
+                value={formData.semester}
+                onChange={handleInputChange}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+                  <option key={sem} value={sem}>
+                    Sem {sem}
+                  </option>
+                ))}
+              </select>
+              <select
+                name="section"
+                value={formData.section}
+                onChange={handleInputChange}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                <option value="A">Section A</option>
+                <option value="B">Section B</option>
+                <option value="C">Section C</option>
+              </select>
             </div>
           )}
 
-          <button className="rounded-xl bg-slate-900 px-4 py-3 text-white md:col-span-2">
-            Register
+          {/* Password */}
+          <input
+            type="password"
+            name="password"
+            value={formData.password}
+            onChange={handleInputChange}
+            placeholder="Password"
+            required
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+          />
+
+          {/* Confirm Password */}
+          <input
+            type="password"
+            name="confirmPassword"
+            value={formData.confirmPassword}
+            onChange={handleInputChange}
+            placeholder="Confirm Password"
+            required
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+          />
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-linear-to-r from-blue-600 to-blue-800 text-white py-2 rounded-lg font-semibold hover:from-blue-700 hover:to-blue-900 disabled:opacity-50 transition"
+          >
+            {loading ? "Creating Account..." : "Sign Up"}
           </button>
         </form>
 
-        <p className="mt-6 text-center">
-          <Link to="/login" className="underline">
-            Login
-          </Link>
-        </p>
+        {/* Footer */}
+        <div className="text-center">
+          <p className="text-sm text-gray-600">
+            Already have an account?{" "}
+            <Link
+              to="/login"
+              className="font-medium text-blue-600 hover:text-blue-700"
+            >
+              Sign in here
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );
-}
+};
+
+export default RegisterPage;
