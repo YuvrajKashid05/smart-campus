@@ -1,4 +1,17 @@
 import { useContext, useState } from "react";
+import {
+  MdBarChart,
+  MdCalendarMonth,
+  MdCampaign,
+  MdClose,
+  MdDescription,
+  MdGroup,
+  MdLogout,
+  MdMenu,
+  MdMessage,
+  MdQrCode2,
+  MdSchool,
+} from "react-icons/md";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AuthContext } from "../../context/AuthContext";
 
@@ -14,28 +27,88 @@ const Navbar = () => {
   };
 
   const studentLinks = [
-    { name: "Dashboard", path: "/student/dashboard", icon: "📊" },
-    { name: "Timetable", path: "/student/timetable", icon: "📅" },
-    { name: "Attendance", path: "/student/attendance", icon: "📱" },
-    { name: "Notices", path: "/student/notices", icon: "📄" },
-    { name: "Announcements", path: "/student/announcements", icon: "📢" },
-    { name: "Complaint", path: "/student/complaint", icon: "💬" },
+    {
+      name: "Dashboard",
+      path: "/student/dashboard",
+      icon: <MdBarChart size={18} />,
+    },
+    {
+      name: "Timetable",
+      path: "/student/timetable",
+      icon: <MdCalendarMonth size={18} />,
+    },
+    {
+      name: "Attendance",
+      path: "/student/attendance",
+      icon: <MdQrCode2 size={18} />,
+    },
+    {
+      name: "Notices",
+      path: "/student/notices",
+      icon: <MdDescription size={18} />,
+    },
+    {
+      name: "Announcements",
+      path: "/student/announcements",
+      icon: <MdCampaign size={18} />,
+    },
+    {
+      name: "Complaint",
+      path: "/student/complaint",
+      icon: <MdMessage size={18} />,
+    },
   ];
 
   const facultyLinks = [
-    { name: "Dashboard", path: "/faculty/dashboard", icon: "📊" },
-    { name: "Timetable", path: "/faculty/timetable", icon: "📅" },
-    { name: "QR Attendance", path: "/faculty/qr-attendance", icon: "📱" },
-    { name: "Notice", path: "/faculty/notice", icon: "📄" },
-    { name: "Announcement", path: "/faculty/announcement", icon: "📢" },
+    {
+      name: "Dashboard",
+      path: "/faculty/dashboard",
+      icon: <MdBarChart size={18} />,
+    },
+    {
+      name: "Timetable",
+      path: "/faculty/timetable",
+      icon: <MdCalendarMonth size={18} />,
+    },
+    {
+      name: "QR Attendance",
+      path: "/faculty/qr-attendance",
+      icon: <MdQrCode2 size={18} />,
+    },
+    {
+      name: "Notice",
+      path: "/faculty/notice",
+      icon: <MdDescription size={18} />,
+    },
+    {
+      name: "Announcement",
+      path: "/faculty/announcement",
+      icon: <MdCampaign size={18} />,
+    },
   ];
 
   const adminLinks = [
-    { name: "Dashboard", path: "/admin/dashboard", icon: "📊" },
-    { name: "Users", path: "/admin/users", icon: "👥" },
-    { name: "Complaints", path: "/admin/complaints", icon: "💬" },
-    { name: "Notices", path: "/admin/notices", icon: "📄" },
-    { name: "Announcements", path: "/admin/announcements", icon: "📢" },
+    {
+      name: "Dashboard",
+      path: "/admin/dashboard",
+      icon: <MdBarChart size={18} />,
+    },
+    { name: "Users", path: "/admin/users", icon: <MdGroup size={18} /> },
+    {
+      name: "Complaints",
+      path: "/admin/complaints",
+      icon: <MdMessage size={18} />,
+    },
+    {
+      name: "Notices",
+      path: "/admin/notices",
+      icon: <MdDescription size={18} />,
+    },
+    {
+      name: "Announcements",
+      path: "/admin/announcements",
+      icon: <MdCampaign size={18} />,
+    },
   ];
 
   const getNavLinks = () => {
@@ -47,11 +120,10 @@ const Navbar = () => {
   };
 
   const navLinks = getNavLinks();
-
   const isActive = (path) => location.pathname === path;
 
   return (
-    <nav className="bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg">
+    <nav className="bg-linear-to-r from-blue-600 to-blue-800 text-white shadow-lg">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
@@ -61,7 +133,7 @@ const Navbar = () => {
             }
             className="flex items-center gap-2 text-2xl font-bold"
           >
-            <span>🎓</span>
+            <MdSchool size={28} />
             <span className="hidden sm:inline">Smart Campus</span>
           </Link>
 
@@ -72,14 +144,14 @@ const Navbar = () => {
                 <Link
                   key={link.path}
                   to={link.path}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+                  className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium transition ${
                     isActive(link.path)
                       ? "bg-white bg-opacity-20"
                       : "hover:bg-white hover:bg-opacity-10"
                   }`}
                   title={link.name}
                 >
-                  <span className="mr-1">{link.icon}</span>
+                  {link.icon}
                   <span className="hidden lg:inline">{link.name}</span>
                 </Link>
               ))}
@@ -90,23 +162,22 @@ const Navbar = () => {
           <div className="flex items-center gap-4">
             {isAuthenticated ? (
               <>
-                {/* User Info */}
                 <div className="hidden sm:flex items-center gap-2">
                   <div className="w-8 h-8 rounded-full bg-white bg-opacity-20 flex items-center justify-center text-sm font-bold">
-                    {user?.firstName?.charAt(0)}
+                    {user?.name?.charAt(0)?.toUpperCase()}
                   </div>
                   <div className="hidden lg:block text-sm">
-                    <p className="font-semibold">{user?.firstName}</p>
+                    <p className="font-semibold">{user?.name}</p>
                     <p className="text-blue-100 text-xs">{user?.role}</p>
                   </div>
                 </div>
 
-                {/* Logout Button */}
                 <button
                   onClick={handleLogout}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-semibold transition text-sm"
+                  className="flex items-center gap-1 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-semibold transition text-sm"
                 >
-                  🚪 Logout
+                  <MdLogout size={16} />
+                  <span className="hidden sm:inline">Logout</span>
                 </button>
               </>
             ) : (
@@ -126,13 +197,12 @@ const Navbar = () => {
               </div>
             )}
 
-            {/* Mobile Menu Toggle */}
             {isAuthenticated && (
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="md:hidden p-2 hover:bg-white hover:bg-opacity-10 rounded-lg"
               >
-                {mobileMenuOpen ? "✕" : "☰"}
+                {mobileMenuOpen ? <MdClose size={20} /> : <MdMenu size={20} />}
               </button>
             )}
           </div>
@@ -146,13 +216,13 @@ const Navbar = () => {
                 key={link.path}
                 to={link.path}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`block px-4 py-2 rounded-lg text-sm font-medium transition ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${
                   isActive(link.path)
                     ? "bg-white bg-opacity-20"
                     : "hover:bg-white hover:bg-opacity-10"
                 }`}
               >
-                <span className="mr-2">{link.icon}</span>
+                {link.icon}
                 {link.name}
               </Link>
             ))}

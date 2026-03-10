@@ -1,26 +1,53 @@
 import { useEffect, useState } from "react";
+import {
+  MdBarChart,
+  MdCampaign,
+  MdCheckCircle,
+  MdDescription,
+  MdGroup,
+  MdMessage,
+  MdSchool,
+  MdSettings,
+} from "react-icons/md";
 import { Link } from "react-router-dom";
+import * as complaintsService from "../../services/complaints";
+import * as usersService from "../../services/users";
 
 const AdminDashboard = () => {
   const [stats, setStats] = useState({
     totalUsers: 0,
-    totalStudents: 0,
-    totalFaculty: 0,
-    totalComplaints: 0,
+    students: 0,
+    faculty: 0,
+    complaints: 0,
   });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate loading data
-    setTimeout(() => {
-      setStats({
-        totalUsers: 350,
-        totalStudents: 280,
-        totalFaculty: 50,
-        totalComplaints: 12,
-      });
-      setLoading(false);
-    }, 500);
+    const fetchStats = async () => {
+      try {
+        const [usersData, complaintsData] = await Promise.allSettled([
+          usersService.getAllUsers(),
+          complaintsService.getComplaints(),
+        ]);
+        const users =
+          usersData.status === "fulfilled" ? usersData.value?.data || [] : [];
+        const complaints =
+          complaintsData.status === "fulfilled"
+            ? complaintsData.value?.data || []
+            : [];
+        setStats({
+          totalUsers: users.length,
+          students: users.filter((u) => u.role === "STUDENT").length,
+          faculty: users.filter((u) => u.role === "FACULTY").length,
+          complaints: complaints.length,
+        });
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchStats();
   }, []);
 
   if (loading) {
@@ -33,210 +60,151 @@ const AdminDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-purple-600 to-purple-800 text-white py-8 px-4 sm:px-6 lg:px-8">
+      <div className="bg-linear-to-r from-purple-600 to-purple-800 text-white py-8 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          <h1 className="text-3xl font-bold">Admin Dashboard 🔧</h1>
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            <MdSettings size={32} /> Admin Dashboard
+          </h1>
           <p className="mt-2 text-purple-100">
             System Administration & Management
           </p>
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        {/* Statistics */}
+        {/* Stats */}
         <div className="grid md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">Total Users</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">
-                  {stats.totalUsers}
-                </p>
+          {[
+            {
+              label: "Total Users",
+              value: stats.totalUsers,
+              icon: <MdGroup size={36} />,
+              color: "border-blue-500",
+              iconColor: "text-blue-400",
+            },
+            {
+              label: "Students",
+              value: stats.students,
+              icon: <MdSchool size={36} />,
+              color: "border-green-500",
+              iconColor: "text-green-400",
+            },
+            {
+              label: "Faculty",
+              value: stats.faculty,
+              icon: <MdSchool size={36} />,
+              color: "border-orange-500",
+              iconColor: "text-orange-400",
+            },
+            {
+              label: "Complaints",
+              value: stats.complaints,
+              icon: <MdMessage size={36} />,
+              color: "border-red-500",
+              iconColor: "text-red-400",
+            },
+          ].map((s) => (
+            <div
+              key={s.label}
+              className={`bg-white rounded-lg shadow-md p-6 border-l-4 ${s.color}`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-600 text-sm font-medium">{s.label}</p>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">
+                    {s.value}
+                  </p>
+                </div>
+                <div className={s.iconColor}>{s.icon}</div>
               </div>
-              <div className="text-4xl">👥</div>
             </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">Students</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">
-                  {stats.totalStudents}
-                </p>
-              </div>
-              <div className="text-4xl">🎓</div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-orange-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">Faculty</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">
-                  {stats.totalFaculty}
-                </p>
-              </div>
-              <div className="text-4xl">👨‍🏫</div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-red-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">Complaints</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">
-                  {stats.totalComplaints}
-                </p>
-              </div>
-              <div className="text-4xl">💬</div>
-            </div>
-          </div>
+          ))}
         </div>
 
         {/* Quick Actions */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           <Link
             to="/admin/users"
-            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition"
+            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition flex items-start gap-4"
           >
-            <p className="text-3xl mb-2">👥</p>
-            <h3 className="font-semibold text-gray-900">Manage Users</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Create, edit, delete user accounts
-            </p>
-            <p className="text-xs text-gray-500 mt-2 font-semibold">
-              Total: {stats.totalUsers}
-            </p>
+            <MdGroup className="text-blue-500 mt-1" size={32} />
+            <div>
+              <h3 className="font-semibold text-gray-900">Manage Users</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                View and manage all accounts
+              </p>
+            </div>
           </Link>
-
           <Link
             to="/admin/complaints"
-            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition"
+            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition flex items-start gap-4"
           >
-            <p className="text-3xl mb-2">💬</p>
-            <h3 className="font-semibold text-gray-900">View Complaints</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Review and manage student complaints
-            </p>
-            <p className="text-xs text-gray-500 mt-2 font-semibold">
-              Pending: {stats.totalComplaints}
-            </p>
+            <MdMessage className="text-red-500 mt-1" size={32} />
+            <div>
+              <h3 className="font-semibold text-gray-900">View Complaints</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Review student complaints
+              </p>
+            </div>
           </Link>
-
           <Link
             to="/admin/notices"
-            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition"
+            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition flex items-start gap-4"
           >
-            <p className="text-3xl mb-2">📄</p>
-            <h3 className="font-semibold text-gray-900">Manage Notices</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Create and manage notices
-            </p>
-            <p className="text-xs text-gray-500 mt-2 font-semibold">
-              Control all notices
-            </p>
+            <MdDescription className="text-orange-500 mt-1" size={32} />
+            <div>
+              <h3 className="font-semibold text-gray-900">Manage Notices</h3>
+              <p className="text-sm text-gray-600 mt-1">Control all notices</p>
+            </div>
           </Link>
-
           <Link
             to="/admin/announcements"
-            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition"
+            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition flex items-start gap-4"
           >
-            <p className="text-3xl mb-2">📢</p>
-            <h3 className="font-semibold text-gray-900">
-              Manage Announcements
-            </h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Create and control announcements
-            </p>
-            <p className="text-xs text-gray-500 mt-2 font-semibold">
-              System-wide control
-            </p>
+            <MdCampaign className="text-purple-500 mt-1" size={32} />
+            <div>
+              <h3 className="font-semibold text-gray-900">
+                Manage Announcements
+              </h3>
+              <p className="text-sm text-gray-600 mt-1">System-wide control</p>
+            </div>
           </Link>
-
-          <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition cursor-pointer">
-            <p className="text-3xl mb-2">📊</p>
-            <h3 className="font-semibold text-gray-900">Reports & Analytics</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              View system reports and statistics
-            </p>
-            <p className="text-xs text-gray-500 mt-2 font-semibold">
-              Full analytics
-            </p>
+          <div className="bg-white rounded-lg shadow-md p-6 flex items-start gap-4">
+            <MdBarChart className="text-indigo-500 mt-1" size={32} />
+            <div>
+              <h3 className="font-semibold text-gray-900">
+                Reports & Analytics
+              </h3>
+              <p className="text-sm text-gray-600 mt-1">
+                View system statistics
+              </p>
+            </div>
           </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition cursor-pointer">
-            <p className="text-3xl mb-2">⚙️</p>
-            <h3 className="font-semibold text-gray-900">System Settings</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Configure system parameters
-            </p>
-            <p className="text-xs text-gray-500 mt-2 font-semibold">
-              Admin controls
-            </p>
+          <div className="bg-white rounded-lg shadow-md p-6 flex items-start gap-4">
+            <MdSettings className="text-gray-500 mt-1" size={32} />
+            <div>
+              <h3 className="font-semibold text-gray-900">System Settings</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Configure system parameters
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* System Health */}
-        <div className="grid md:grid-cols-2 gap-8">
-          {/* System Status */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">
-              🟢 System Status
-            </h2>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-gray-700">Database</span>
-                <span className="px-3 py-1 bg-green-100 text-green-800 rounded text-sm font-semibold">
-                  ✓ Online
+        {/* System Status */}
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+            <MdCheckCircle className="text-green-500" /> System Status
+          </h2>
+          <div className="space-y-3">
+            {["Database", "Server", "API Services"].map((svc) => (
+              <div key={svc} className="flex items-center justify-between">
+                <span className="text-gray-700">{svc}</span>
+                <span className="flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded text-sm font-semibold">
+                  <MdCheckCircle size={14} /> Online
                 </span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-700">Server</span>
-                <span className="px-3 py-1 bg-green-100 text-green-800 rounded text-sm font-semibold">
-                  ✓ Online
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-700">API Services</span>
-                <span className="px-3 py-1 bg-green-100 text-green-800 rounded text-sm font-semibold">
-                  ✓ Running
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-700">Email Service</span>
-                <span className="px-3 py-1 bg-green-100 text-green-800 rounded text-sm font-semibold">
-                  ✓ Working
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Recent Activity */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">
-              📋 Recent Activity
-            </h2>
-            <div className="space-y-3 text-sm">
-              <div className="border-l-4 border-blue-500 bg-blue-50 p-3 rounded">
-                <p className="font-semibold text-gray-900">
-                  New User Registered
-                </p>
-                <p className="text-gray-600">2 hours ago</p>
-              </div>
-              <div className="border-l-4 border-red-500 bg-red-50 p-3 rounded">
-                <p className="font-semibold text-gray-900">
-                  Complaint Submitted
-                </p>
-                <p className="text-gray-600">4 hours ago</p>
-              </div>
-              <div className="border-l-4 border-green-500 bg-green-50 p-3 rounded">
-                <p className="font-semibold text-gray-900">Notice Published</p>
-                <p className="text-gray-600">1 day ago</p>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </div>

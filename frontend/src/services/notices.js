@@ -2,7 +2,8 @@ import api from './api';
 
 export const getNotices = async (filters) => {
   const response = await api.get('/notices', { params: filters });
-  return response.data;
+  // backend returns { ok, notices }
+  return { ...response.data, data: response.data.notices };
 };
 
 export const getNoticeById = async (id) => {
@@ -22,15 +23,5 @@ export const updateNotice = async (id, noticeData) => {
 
 export const deleteNotice = async (id) => {
   const response = await api.delete(`/notices/${id}`);
-  return response.data;
-};
-
-export const getNoticesByDept = async (dept) => {
-  const response = await api.get('/notices/department', { params: { dept } });
-  return response.data;
-};
-
-export const markNoticeAsRead = async (noticeId) => {
-  const response = await api.put(`/notices/${noticeId}/read`);
   return response.data;
 };

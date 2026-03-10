@@ -1,62 +1,64 @@
 import { useContext, useEffect, useState } from "react";
+import {
+  MdCalendarMonth,
+  MdCampaign,
+  MdDescription,
+  MdMessage,
+  MdQrCode2,
+} from "react-icons/md";
 import { Link } from "react-router-dom";
 import { AuthContext } from "../../context/AuthContext";
 import * as announcementsService from "../../services/announcements";
-import * as attendanceService from "../../services/attendance";
 import * as noticesService from "../../services/notices";
 import * as timetableService from "../../services/timetable";
+
+const DAY_MAP = {
+  MON: "Monday",
+  TUE: "Tuesday",
+  WED: "Wednesday",
+  THU: "Thursday",
+  FRI: "Friday",
+};
 
 const StudentDashboard = () => {
   const { user } = useContext(AuthContext);
   const [timetable, setTimetable] = useState([]);
   const [notices, setNotices] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
-  const [stats, setStats] = useState({
-    totalClasses: 0,
-    attendancePercentage: 0,
-    pendingComplaints: 0,
-  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        // Fetch student's timetable
-        const timetableData = await timetableService.getStudentTimetable(
-          user?.id,
-        );
-        setTimetable(timetableData?.data?.slice(0, 3) || []);
+        const [ttData, notData, annData] = await Promise.allSettled([
+          timetableService.getStudentTimetable(),
+          noticesService.getNotices(),
+          announcementsService.getAnnouncements(),
+        ]);
 
-        // Fetch notices
-        const noticesData = await noticesService.getNotices({ limit: 3 });
-        setNotices(noticesData?.data || []);
-
-        // Fetch announcements
-        const announcementsData = await announcementsService.getAnnouncements({
-          limit: 3,
-        });
-        setAnnouncements(announcementsData?.data || []);
-
-        // Fetch attendance stats
-        const attendanceStats = await attendanceService.getAttendanceStats(
-          user?.id,
-        );
-        setStats({
-          totalClasses: attendanceStats?.totalClasses || 0,
-          attendancePercentage: attendanceStats?.percentage || 0,
-          pendingComplaints: 0,
-        });
+        if (ttData.status === "fulfilled") {
+          setTimetable((ttData.value?.timetables || []).slice(0, 3));
+        }
+        if (notData.status === "fulfilled") {
+          setNotices((notData.value?.notices || []).slice(0, 3));
+        }
+        if (annData.status === "fulfilled") {
+          setAnnouncements((annData.value?.announcements || []).slice(0, 3));
+        }
       } catch (error) {
-        console.error("Error fetching dashboard data:", error);
+        console.error("Dashboard fetch error:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    if (user?.id) {
-      fetchDashboardData();
-    }
-  }, [user?.id]);
+    fetchDashboardData();
+  }, []);
+
+  const todayAbbr = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][
+    new Date().getDay()
+  ];
+  const todayClasses = timetable.filter((t) => t.day === todayAbbr);
 
   if (loading) {
     return (
@@ -68,37 +70,18 @@ const StudentDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white py-8 px-4 sm:px-6 lg:px-8">
+      <div className="bg-linear-to-r from-blue-600 to-blue-800 text-white py-8 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          <h1 className="text-3xl font-bold">Welcome, {user?.firstName}! 👋</h1>
+          <h1 className="text-3xl font-bold">Welcome, {user?.name}!</h1>
           <p className="mt-2 text-blue-100">
-            {user?.email} • {user?.department} • Semester {user?.semester}
+            {user?.email} • {user?.dept} • Semester {user?.semester}
           </p>
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        {/* Statistics Cards */}
+        {/* Stats Cards */}
         <div className="grid md:grid-cols-3 gap-6 mb-8">
-          {/* Attendance Card */}
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">Attendance</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">
-                  {stats.attendancePercentage}%
-                </p>
-              </div>
-              <div className="text-4xl">📊</div>
-            </div>
-            <p className="text-xs text-gray-500 mt-2">
-              Total Classes: {stats.totalClasses}
-            </p>
-          </div>
-
-          {/* Today's Classes */}
           <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
             <div className="flex items-center justify-between">
               <div>
@@ -106,29 +89,20 @@ const StudentDashboard = () => {
                   Today's Classes
                 </p>
                 <p className="text-3xl font-bold text-gray-900 mt-2">
-                  {
-                    timetable.filter(
-                      (t) =>
-                        t.day ===
-                        new Date().toLocaleDateString("en-US", {
-                          weekday: "long",
-                        }),
-                    ).length
-                  }
+                  {todayClasses.length}
                 </p>
               </div>
-              <div className="text-4xl">📚</div>
+              <MdCalendarMonth className="text-blue-400" size={40} />
             </div>
             <Link
               to="/student/timetable"
-              className="text-xs text-blue-600 mt-2 hover:underline"
+              className="text-xs text-blue-600 mt-2 hover:underline block"
             >
               View Full Timetable →
             </Link>
           </div>
 
-          {/* Mark Attendance */}
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
+          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 text-sm font-medium">
@@ -136,13 +110,31 @@ const StudentDashboard = () => {
                 </p>
                 <p className="text-sm text-gray-700 mt-2">Scan QR Code</p>
               </div>
-              <div className="text-4xl">📱</div>
+              <MdQrCode2 className="text-green-400" size={40} />
             </div>
             <Link
               to="/student/attendance"
-              className="text-xs text-purple-600 mt-2 hover:underline"
+              className="text-xs text-green-600 mt-2 hover:underline block"
             >
               Start Scanning →
+            </Link>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 text-sm font-medium">Notices</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">
+                  {notices.length}
+                </p>
+              </div>
+              <MdDescription className="text-purple-400" size={40} />
+            </div>
+            <Link
+              to="/student/notices"
+              className="text-xs text-purple-600 mt-2 hover:underline block"
+            >
+              View All →
             </Link>
           </div>
         </div>
@@ -151,43 +143,47 @@ const StudentDashboard = () => {
         <div className="grid md:grid-cols-3 gap-6 mb-8">
           <Link
             to="/student/notices"
-            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition"
+            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition flex items-start gap-4"
           >
-            <p className="text-2xl mb-2">📄</p>
-            <h3 className="font-semibold text-gray-900">Notices</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              View all notices from faculty
-            </p>
+            <MdDescription className="text-blue-500 mt-1" size={28} />
+            <div>
+              <h3 className="font-semibold text-gray-900">Notices</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                View all notices from faculty
+              </p>
+            </div>
           </Link>
-
           <Link
             to="/student/announcements"
-            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition"
+            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition flex items-start gap-4"
           >
-            <p className="text-2xl mb-2">📢</p>
-            <h3 className="font-semibold text-gray-900">Announcements</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Stay updated with latest news
-            </p>
+            <MdCampaign className="text-purple-500 mt-1" size={28} />
+            <div>
+              <h3 className="font-semibold text-gray-900">Announcements</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Stay updated with latest news
+              </p>
+            </div>
           </Link>
-
           <Link
             to="/student/complaint"
-            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition"
+            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition flex items-start gap-4"
           >
-            <p className="text-2xl mb-2">💬</p>
-            <h3 className="font-semibold text-gray-900">Submit Complaint</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Report issues or concerns
-            </p>
+            <MdMessage className="text-red-500 mt-1" size={28} />
+            <div>
+              <h3 className="font-semibold text-gray-900">Submit Complaint</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Report issues or concerns
+              </p>
+            </div>
           </Link>
         </div>
 
-        {/* Timetable Section */}
+        {/* Timetable */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-gray-900">
-              📅 Your Timetable (This Week)
+            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <MdCalendarMonth className="text-blue-500" /> Your Timetable
             </h2>
             <Link
               to="/student/timetable"
@@ -196,7 +192,6 @@ const StudentDashboard = () => {
               View All →
             </Link>
           </div>
-
           {timetable.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -222,16 +217,24 @@ const StudentDashboard = () => {
                 <tbody>
                   {timetable.map((cls, idx) => (
                     <tr key={idx} className="border-b hover:bg-gray-50">
-                      <td className="py-3 px-4">{cls.day}</td>
-                      <td className="py-3 px-4">{cls.time}</td>
                       <td className="py-3 px-4">
-                        <span className="font-semibold">{cls.subjectCode}</span>
-                        <br />
-                        <span className="text-sm text-gray-600">
-                          {cls.subjectName}
-                        </span>
+                        {DAY_MAP[cls.day] || cls.day}
                       </td>
-                      <td className="py-3 px-4">{cls.facultyName || "-"}</td>
+                      <td className="py-3 px-4">
+                        {cls.startTime} – {cls.endTime}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="font-semibold">{cls.title}</span>
+                        {cls.subject && (
+                          <>
+                            <br />
+                            <span className="text-sm text-gray-600">
+                              {cls.subject}
+                            </span>
+                          </>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">{cls.faculty?.name || "-"}</td>
                       <td className="py-3 px-4">{cls.room || "-"}</td>
                     </tr>
                   ))}
@@ -245,11 +248,11 @@ const StudentDashboard = () => {
           )}
         </div>
 
-        {/* Notices Section */}
+        {/* Recent Notices */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-gray-900">
-              📄 Recent Notices
+            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <MdDescription className="text-blue-500" /> Recent Notices
             </h2>
             <Link
               to="/student/notices"
@@ -258,7 +261,6 @@ const StudentDashboard = () => {
               View All →
             </Link>
           </div>
-
           {notices.length > 0 ? (
             <div className="space-y-4">
               {notices.map((notice) => (
@@ -270,7 +272,7 @@ const StudentDashboard = () => {
                     {notice.title}
                   </h3>
                   <p className="text-sm text-gray-700 mt-1">
-                    {notice.description?.substring(0, 100)}...
+                    {notice.body?.substring(0, 100)}...
                   </p>
                   <p className="text-xs text-gray-500 mt-2">
                     {new Date(notice.createdAt).toLocaleDateString()}
@@ -285,11 +287,11 @@ const StudentDashboard = () => {
           )}
         </div>
 
-        {/* Announcements Section */}
+        {/* Announcements */}
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-gray-900">
-              📢 Announcements
+            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <MdCampaign className="text-purple-500" /> Announcements
             </h2>
             <Link
               to="/student/announcements"
@@ -298,22 +300,19 @@ const StudentDashboard = () => {
               View All →
             </Link>
           </div>
-
           {announcements.length > 0 ? (
             <div className="space-y-4">
-              {announcements.map((announcement) => (
+              {announcements.map((ann) => (
                 <div
-                  key={announcement._id}
+                  key={ann._id}
                   className="border-l-4 border-purple-500 bg-purple-50 p-4 rounded"
                 >
-                  <h3 className="font-semibold text-gray-900">
-                    {announcement.title}
-                  </h3>
+                  <h3 className="font-semibold text-gray-900">{ann.title}</h3>
                   <p className="text-sm text-gray-700 mt-1">
-                    {announcement.description?.substring(0, 100)}...
+                    {ann.message?.substring(0, 100)}...
                   </p>
                   <p className="text-xs text-gray-500 mt-2">
-                    {new Date(announcement.createdAt).toLocaleDateString()}
+                    {new Date(ann.createdAt).toLocaleDateString()}
                   </p>
                 </div>
               ))}

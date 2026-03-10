@@ -231,3 +231,40 @@ export async function login(req, res) {
     });
   }
 }
+export async function me(req, res) {
+  return res.json({ ok: true, user: req.user });
+}
+
+export async function logout(req, res) {
+  return res.json({ ok: true, message: "Logged out" });
+}
+
+export async function updateProfile(req, res) {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ ok: false, error: "User not found" });
+
+    const allowed = ["name", "mobileNumber"];
+    allowed.forEach((field) => {
+      if (req.body[field] !== undefined) user[field] = req.body[field];
+    });
+
+    await user.save();
+    const updated = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      mobileNumber: user.mobileNumber,
+      dept: user.dept,
+      section: user.section,
+      semester: user.semester,
+      rollNo: user.rollNo,
+      employeeId: user.employeeId,
+    };
+    return res.json({ ok: true, user: updated });
+  } catch (err) {
+    console.error("UPDATE PROFILE ERROR:", err);
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+}

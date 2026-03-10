@@ -9,27 +9,20 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Initialize auth from localStorage
   useEffect(() => {
-    const initializeAuth = async () => {
-      try {
-        const storedToken = localStorage.getItem("token");
-        const storedUser = localStorage.getItem("user");
-
-        if (storedToken && storedUser) {
-          setToken(storedToken);
-          setUser(JSON.parse(storedUser));
-        }
-      } catch (err) {
-        console.error("Auth initialization error:", err);
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-      } finally {
-        setLoading(false);
+    try {
+      const storedToken = localStorage.getItem("token");
+      const storedUser = localStorage.getItem("user");
+      if (storedToken && storedUser) {
+        setToken(storedToken);
+        setUser(JSON.parse(storedUser));
       }
-    };
-
-    initializeAuth();
+    } catch (err) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   const login = useCallback(async (email, password) => {
@@ -37,16 +30,16 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     try {
       const response = await authService.login(email, password);
+      if (!response.ok) throw new Error(response.error || "Login failed");
       const { token, user } = response;
-
       setToken(token);
       setUser(user);
       localStorage.setItem("token", token);
       localStorage.setItem("user", JSON.stringify(user));
-
       return { success: true, user };
     } catch (err) {
-      const message = err.response?.data?.message || "Login failed";
+      const message =
+        err.response?.data?.error || err.message || "Login failed";
       setError(message);
       return { success: false, error: message };
     } finally {
@@ -59,9 +52,18 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     try {
       const response = await authService.register(userData);
-      return { success: true, message: response.message };
+      if (!response.ok)
+        throw new Error(response.error || "Registration failed");
+      // Backend returns token + user on register — auto login
+      const { token, user } = response;
+      setToken(token);
+      setUser(user);
+      localStorage.setItem("token", token);
+      localStorage.setItem("user", JSON.stringify(user));
+      return { success: true, user };
     } catch (err) {
-      const message = err.response?.data?.message || "Registration failed";
+      const message =
+        err.response?.data?.error || err.message || "Registration failed";
       setError(message);
       return { success: false, error: message };
     } finally {
@@ -80,12 +82,14 @@ export const AuthProvider = ({ children }) => {
     async (userData) => {
       try {
         const response = await authService.updateProfile(userData);
+        if (!response.ok) throw new Error(response.error || "Update failed");
         const updatedUser = { ...user, ...response.user };
         setUser(updatedUser);
         localStorage.setItem("user", JSON.stringify(updatedUser));
         return { success: true, user: updatedUser };
       } catch (err) {
-        const message = err.response?.data?.message || "Update failed";
+        const message =
+          err.response?.data?.error || err.message || "Update failed";
         setError(message);
         return { success: false, error: message };
       }
@@ -95,17 +99,21 @@ export const AuthProvider = ({ children }) => {
 
   const isAuthenticated = !!token && !!user;
 
-  const value = {
-    user,
-    token,
-    loading,
-    error,
-    isAuthenticated,
-    login,
-    register,
-    logout,
-    updateUserProfile,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        loading,
+        error,
+        isAuthenticated,
+        login,
+        register,
+        logout,
+        updateUserProfile,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 };
