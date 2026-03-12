@@ -2,34 +2,35 @@ import { Route, BrowserRouter as Router, Routes } from "react-router-dom";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import { AuthProvider } from "./context/AuthContext";
 
-// Auth Pages
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import RegisterPage from "./pages/RegisterPage";
 
-// Dashboards
 import AdminDashboard from "./components/dashboards/AdminDashboard";
 import FacultyDashboard from "./components/dashboards/FacultyDashboard";
 import StudentDashboard from "./components/dashboards/StudentDashboard";
 
-// Student Components
 import MarkAttendance from "./components/student/MarkAttendance";
+import MyAttendance from "./components/student/MyAttendance";
 import SubmitComplaint from "./components/student/SubmitComplaint";
 import ViewAnnouncements from "./components/student/ViewAnnouncements";
 import ViewNotices from "./components/student/ViewNotices";
 import ViewTimetable from "./components/student/ViewTimetable";
 
-// Faculty Components
+import AttendanceReport from "./components/faculty/AttendanceReport";
 import CreateAnnouncement from "./components/faculty/CreateAnnouncement";
 import CreateNotice from "./components/faculty/CreateNotice";
 import CreateTimetable from "./components/faculty/CreateTimetable";
+import DefaulterList from "./components/faculty/DefaulterList";
 import GenerateQRAttendance from "./components/faculty/GenerateQRAttendance";
+import StudentRecords from "./components/faculty/StudentRecords";
 
-// Admin Components
 import ManageAnnouncements from "./components/admin/ManageAnnouncements";
 import ManageNotices from "./components/admin/ManageNotices";
 import ManageUsers from "./components/admin/ManageUsers";
+import ReportsAnalytics from "./components/admin/ReportsAnalytics";
+import SystemSettings from "./components/admin/SystemSettings";
 import ViewComplaints from "./components/admin/ViewComplaints";
 
 import Navbar from "./components/common/Navbar";
@@ -40,12 +41,11 @@ function App() {
       <AuthProvider>
         <Navbar />
         <Routes>
-          {/* Public Routes */}
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
 
-          {/* Student Routes */}
+          {/* Student */}
           <Route
             path="/student/dashboard"
             element={
@@ -67,6 +67,14 @@ function App() {
             element={
               <ProtectedRoute requiredRole="STUDENT">
                 <MarkAttendance />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/student/my-attendance"
+            element={
+              <ProtectedRoute requiredRole="STUDENT">
+                <MyAttendance />
               </ProtectedRoute>
             }
           />
@@ -95,7 +103,7 @@ function App() {
             }
           />
 
-          {/* Faculty Routes */}
+          {/* Faculty */}
           <Route
             path="/faculty/dashboard"
             element={
@@ -105,18 +113,42 @@ function App() {
             }
           />
           <Route
-            path="/faculty/timetable"
-            element={
-              <ProtectedRoute requiredRole="FACULTY">
-                <CreateTimetable />
-              </ProtectedRoute>
-            }
-          />
-          <Route
             path="/faculty/qr-attendance"
             element={
               <ProtectedRoute requiredRole="FACULTY">
                 <GenerateQRAttendance />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/faculty/attendance-report"
+            element={
+              <ProtectedRoute requiredRole="FACULTY">
+                <AttendanceReport />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/faculty/defaulters"
+            element={
+              <ProtectedRoute requiredRole="FACULTY">
+                <DefaulterList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/faculty/student-records"
+            element={
+              <ProtectedRoute requiredRole="FACULTY">
+                <StudentRecords />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/faculty/timetable"
+            element={
+              <ProtectedRoute requiredRole="FACULTY">
+                <CreateTimetable />
               </ProtectedRoute>
             }
           />
@@ -137,7 +169,7 @@ function App() {
             }
           />
 
-          {/* Admin Routes */}
+          {/* Admin */}
           <Route
             path="/admin/dashboard"
             element={
@@ -178,8 +210,23 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/admin/reports"
+            element={
+              <ProtectedRoute requiredRole="ADMIN">
+                <ReportsAnalytics />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/settings"
+            element={
+              <ProtectedRoute requiredRole="ADMIN">
+                <SystemSettings />
+              </ProtectedRoute>
+            }
+          />
 
-          {/* 404 Route */}
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </AuthProvider>

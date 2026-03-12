@@ -16,7 +16,8 @@ export const submitComplaint = async (complaintData) => {
   return response.data;
 };
 
+// Backend endpoint: PUT /complaints/:id/status
 export const updateComplaintStatus = async (id, status) => {
-  const response = await api.put(`/complaints/${id}`, { status });
+  const response = await api.put(`/complaints/${id}/status`, { status });
   return response.data;
 };

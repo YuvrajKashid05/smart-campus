@@ -23,17 +23,17 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchStats = async () => {
+    (async () => {
       try {
         const [usersData, complaintsData] = await Promise.allSettled([
           usersService.getAllUsers(),
           complaintsService.getComplaints(),
         ]);
         const users =
-          usersData.status === "fulfilled" ? usersData.value?.data || [] : [];
+          usersData.status === "fulfilled" ? usersData.value?.users || [] : [];
         const complaints =
           complaintsData.status === "fulfilled"
-            ? complaintsData.value?.data || []
+            ? complaintsData.value?.complaints || []
             : [];
         setStats({
           totalUsers: users.length,
@@ -46,17 +46,15 @@ const AdminDashboard = () => {
       } finally {
         setLoading(false);
       }
-    };
-    fetchStats();
+    })();
   }, []);
 
-  if (loading) {
+  if (loading)
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
       </div>
     );
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -143,7 +141,7 @@ const AdminDashboard = () => {
             <div>
               <h3 className="font-semibold text-gray-900">View Complaints</h3>
               <p className="text-sm text-gray-600 mt-1">
-                Review student complaints
+                Review and resolve student complaints
               </p>
             </div>
           </Link>
@@ -166,21 +164,29 @@ const AdminDashboard = () => {
               <h3 className="font-semibold text-gray-900">
                 Manage Announcements
               </h3>
-              <p className="text-sm text-gray-600 mt-1">System-wide control</p>
+              <p className="text-sm text-gray-600 mt-1">
+                System-wide announcements
+              </p>
             </div>
           </Link>
-          <div className="bg-white rounded-lg shadow-md p-6 flex items-start gap-4">
+          <Link
+            to="/admin/reports"
+            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition flex items-start gap-4"
+          >
             <MdBarChart className="text-indigo-500 mt-1" size={32} />
             <div>
               <h3 className="font-semibold text-gray-900">
                 Reports & Analytics
               </h3>
               <p className="text-sm text-gray-600 mt-1">
-                View system statistics
+                View system statistics and trends
               </p>
             </div>
-          </div>
-          <div className="bg-white rounded-lg shadow-md p-6 flex items-start gap-4">
+          </Link>
+          <Link
+            to="/admin/settings"
+            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition flex items-start gap-4"
+          >
             <MdSettings className="text-gray-500 mt-1" size={32} />
             <div>
               <h3 className="font-semibold text-gray-900">System Settings</h3>
@@ -188,7 +194,7 @@ const AdminDashboard = () => {
                 Configure system parameters
               </p>
             </div>
-          </div>
+          </Link>
         </div>
 
         {/* System Status */}

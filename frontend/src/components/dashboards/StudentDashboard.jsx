@@ -1,5 +1,6 @@
 import { useContext, useEffect, useState } from "react";
 import {
+  MdBarChart,
   MdCalendarMonth,
   MdCampaign,
   MdDescription,
@@ -117,6 +118,26 @@ const StudentDashboard = () => {
               className="text-xs text-green-600 mt-2 hover:underline block"
             >
               Start Scanning →
+            </Link>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-indigo-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 text-sm font-medium">
+                  My Attendance
+                </p>
+                <p className="text-sm text-gray-700 mt-2">
+                  View subject-wise %
+                </p>
+              </div>
+              <MdBarChart className="text-indigo-400" size={40} />
+            </div>
+            <Link
+              to="/student/my-attendance"
+              className="text-xs text-indigo-600 mt-2 hover:underline block"
+            >
+              View Report →
             </Link>
           </div>
 
