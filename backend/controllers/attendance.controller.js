@@ -53,7 +53,7 @@ export async function startSession(req, res) {
   }
 }
 
-/* ───────────── Mark Attendance ───────────── */
+/* ───────────── Mark Attendance (Student QR Scan) ───────────── */
 
 export async function markAttendance(req, res) {
   try {
@@ -69,15 +69,15 @@ export async function markAttendance(req, res) {
 
     const student = req.user;
 
-    // Department check
+    // ── SECURITY CHECK 1: Department ──
     if (session.dept && session.dept !== "") {
       const studentDept = (student.dept || "").trim().toUpperCase();
       if (studentDept !== session.dept) {
-        return res.status(403).json({ ok: false, error: `Access denied. This attendance is for ${session.dept} department only. You are in ${studentDept || "unknown"} department.` });
+        return res.status(403).json({ ok: false, error: `Access denied. This attendance is for ${session.dept} dept only. You are in ${studentDept || "unknown"}.` });
       }
     }
 
-    // Section check
+    // ── SECURITY CHECK 2: Section ──
     if (session.section && session.section !== "") {
       const studentSection = (student.section || "").trim().toUpperCase();
       if (studentSection !== session.section) {
@@ -85,7 +85,7 @@ export async function markAttendance(req, res) {
       }
     }
 
-    // Semester check
+    // ── SECURITY CHECK 3: Semester ──
     if (session.semester && session.semester > 0) {
       if ((student.semester || 0) !== session.semester) {
         return res.status(403).json({ ok: false, error: `Access denied. This attendance is for Semester ${session.semester} only. You are in Semester ${student.semester || "unknown"}.` });
@@ -104,44 +104,50 @@ export async function markAttendance(req, res) {
   }
 }
 
+/* ───────────── Faculty: Manually Mark a Student ───────────── */
+
+export async function manualMarkAttendance(req, res) {
+  try {
+    const { sessionId } = req.params;
+    const { studentId } = req.body;
+
+    if (!studentId) return res.status(400).json({ ok: false, error: "studentId is required" });
+
+    const session = await AttendanceSession.findById(sessionId);
+    if (!session) return res.status(404).json({ ok: false, error: "Session not found" });
+
+    // Only the faculty who created the session (or admin) can manually mark
+    if (req.user.role !== "ADMIN" && String(session.startedBy) !== String(req.user._id)) {
+      return res.status(403).json({ ok: false, error: "You can only mark attendance in your own sessions" });
+    }
+
+    const student = await User.findById(studentId).select("name rollNo dept section semester role");
+    if (!student) return res.status(404).json({ ok: false, error: "Student not found" });
+    if (student.role !== "STUDENT") return res.status(400).json({ ok: false, error: "User is not a student" });
+
+    try {
+      await AttendanceRecord.create({ session: session._id, student: studentId });
+      return res.json({ ok: true, marked: true, student: { name: student.name, rollNo: student.rollNo } });
+    } catch {
+      return res.json({ ok: true, alreadyMarked: true, student: { name: student.name, rollNo: student.rollNo } });
+    }
+  } catch (err) {
+    console.error("MANUAL MARK ERROR:", err);
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+}
+
 /* ───────────── Student: My Attendance Summary ───────────── */
 
 export async function getMyAttendanceSummary(req, res) {
   try {
     const student = req.user;
 
-    // All sessions this student was eligible for (matching dept/section/semester)
-    const eligibleQuery = {
-      $or: [{ dept: "" }, { dept: { $exists: false } }, { dept: student.dept?.toUpperCase() || "" }]
-    };
-
-    // Be precise: sessions for student's dept
     const allSessions = await AttendanceSession.find({
       $and: [
-        // Dept matches or session has no dept restriction
-        {
-          $or: [
-            { dept: "" },
-            { dept: { $exists: false } },
-            { dept: student.dept?.trim().toUpperCase() }
-          ]
-        },
-        // Section matches or session has no section restriction
-        {
-          $or: [
-            { section: "" },
-            { section: { $exists: false } },
-            { section: student.section?.trim().toUpperCase() }
-          ]
-        },
-        // Semester matches or session has no semester restriction
-        {
-          $or: [
-            { semester: 0 },
-            { semester: { $exists: false } },
-            { semester: student.semester }
-          ]
-        }
+        { $or: [{ dept: "" }, { dept: { $exists: false } }, { dept: student.dept?.trim().toUpperCase() }] },
+        { $or: [{ section: "" }, { section: { $exists: false } }, { section: student.section?.trim().toUpperCase() }] },
+        { $or: [{ semester: 0 }, { semester: { $exists: false } }, { semester: student.semester }] }
       ]
     }).select("_id course dept section semester createdAt");
 
@@ -150,8 +156,6 @@ export async function getMyAttendanceSummary(req, res) {
     }
 
     const sessionIds = allSessions.map(s => s._id);
-
-    // Which sessions did the student mark?
     const markedRecords = await AttendanceRecord.find({
       student: student._id,
       session: { $in: sessionIds }
@@ -159,7 +163,6 @@ export async function getMyAttendanceSummary(req, res) {
 
     const markedSessionIds = new Set(markedRecords.map(r => String(r.session)));
 
-    // Group by course
     const courseMap = {};
     allSessions.forEach(session => {
       const course = session.course;
@@ -169,17 +172,13 @@ export async function getMyAttendanceSummary(req, res) {
       courseMap[course].totalClasses++;
       const present = markedSessionIds.has(String(session._id));
       if (present) courseMap[course].attended++;
-      courseMap[course].sessions.push({
-        date: session.createdAt,
-        present,
-        sessionId: session._id
-      });
+      courseMap[course].sessions.push({ date: session.createdAt, present, sessionId: session._id });
     });
 
     const summary = Object.values(courseMap).map(c => ({
       ...c,
       percentage: Math.round((c.attended / c.totalClasses) * 100),
-      sessions: c.sessions.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10) // last 10
+      sessions: c.sessions.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10)
     }));
 
     const totalSessions = allSessions.length;
@@ -199,13 +198,11 @@ export async function getDefaulters(req, res) {
   try {
     const { dept, section, semester, threshold = 75, month, year } = req.query;
 
-    // Build session filter
     const sessionFilter = { startedBy: req.user._id };
     if (dept) sessionFilter.dept = dept.trim().toUpperCase();
     if (section) sessionFilter.section = section.trim().toUpperCase();
     if (semester) sessionFilter.semester = parseInt(semester);
 
-    // Month filter on sessions
     if (month && year) {
       const start = new Date(parseInt(year), parseInt(month) - 1, 1);
       const end = new Date(parseInt(year), parseInt(month), 1);
@@ -222,16 +219,12 @@ export async function getDefaulters(req, res) {
     }
 
     const sessionIds = sessions.map(s => s._id);
-
-    // Find all eligible students
     const studentFilter = { role: "STUDENT" };
     if (dept) studentFilter.dept = dept.trim().toUpperCase();
     if (section) studentFilter.section = section.trim().toUpperCase();
     if (semester) studentFilter.semester = parseInt(semester);
 
     const students = await User.find(studentFilter).select("name rollNo email dept section semester mobileNumber");
-
-    // For each student count attendance
     const records = await AttendanceRecord.find({ session: { $in: sessionIds } }).select("student session");
 
     const attendanceMap = {};
@@ -250,25 +243,17 @@ export async function getDefaulters(req, res) {
       if (percentage < thresholdNum) {
         defaulters.push({
           student: {
-            _id: student._id,
-            name: student.name,
-            rollNo: student.rollNo,
-            email: student.email,
-            dept: student.dept,
-            section: student.section,
-            semester: student.semester,
-            mobileNumber: student.mobileNumber
+            _id: student._id, name: student.name, rollNo: student.rollNo,
+            email: student.email, dept: student.dept, section: student.section,
+            semester: student.semester, mobileNumber: student.mobileNumber
           },
-          attended,
-          totalSessions: sessions.length,
-          percentage,
+          attended, totalSessions: sessions.length, percentage,
           shortfall: thresholdNum - percentage
         });
       }
     });
 
     defaulters.sort((a, b) => a.percentage - b.percentage);
-
     return res.json({ ok: true, defaulters, totalSessions: sessions.length, threshold: thresholdNum });
   } catch (err) {
     console.error("DEFAULTERS ERROR:", err);

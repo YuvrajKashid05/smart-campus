@@ -8,6 +8,12 @@ const attendanceSessionSchema = new mongoose.Schema(
     dept: {
       type: String, default: ""
     },
+    section: {
+      type: String, default: ""   // e.g. "A", "B" — empty means all sections allowed
+    },
+    semester: {
+      type: Number, default: 0    // 0 means all semesters allowed
+    },
     year: {
       type: Number, default: 1
     },
@@ -24,10 +30,8 @@ const attendanceSessionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// NOTE: TTL auto-delete index REMOVED intentionally.
-// Sessions must persist for attendance reporting even after QR expiry.
-// The expiresAt field is still used in markAttendance() to reject late submissions.
-// Index for fast faculty lookups:
+// Sessions persist — NO TTL auto-delete (needed for attendance reporting)
+// expiresAt is still used to reject late student QR scans
 attendanceSessionSchema.index({ startedBy: 1, createdAt: -1 });
 
 export default mongoose.model("AttendanceSession", attendanceSessionSchema);
