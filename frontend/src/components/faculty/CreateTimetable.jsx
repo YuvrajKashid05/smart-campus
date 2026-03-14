@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { MdAdd, MdDelete, MdEdit, MdRefresh } from "react-icons/md";
+import { MdDelete, MdEdit, MdRefresh } from "react-icons/md";
+import api from "../../services/api";
 import * as timetableService from "../../services/timetable";
 import { Alert, BTN_PRIMARY, INPUT, PAGE, SELECT } from "../../ui";
 
@@ -38,6 +39,7 @@ export default function CreateTimetable() {
   const [success, setSuccess] = useState("");
   const [slots, setSlots] = useState([]);
   const [editingId, setEditingId] = useState(null);
+  const [facultyOptions, setFacultyOptions] = useState([]);
 
   const [meta, setMeta] = useState({
     dept: "",
@@ -53,6 +55,7 @@ export default function CreateTimetable() {
     room: "",
     startTime: "",
     endTime: "",
+    faculty: "",
   });
 
   const setField = (key, value) => {
@@ -73,7 +76,18 @@ export default function CreateTimetable() {
       room: "",
       startTime: "",
       endTime: "",
+      faculty: "",
     });
+  };
+
+  const loadFacultyOptions = async () => {
+    try {
+      const res = await api.get("/users", { params: { role: "FACULTY" } });
+      const users = res?.data?.users || res?.data || [];
+      setFacultyOptions(Array.isArray(users) ? users : []);
+    } catch {
+      setFacultyOptions([]);
+    }
   };
 
   const loadTimetable = async (overrideMeta = null) => {
@@ -96,6 +110,7 @@ export default function CreateTimetable() {
   };
 
   useEffect(() => {
+    loadFacultyOptions();
     loadTimetable();
   }, []);
 
@@ -135,6 +150,7 @@ export default function CreateTimetable() {
       room: form.room,
       startTime: form.startTime,
       endTime: form.endTime,
+      faculty: form.slotType === "BREAK" ? null : form.faculty || null,
     };
 
     try {
@@ -172,6 +188,7 @@ export default function CreateTimetable() {
       room: slot.room || "",
       startTime: slot.startTime || "",
       endTime: slot.endTime || "",
+      faculty: slot.faculty?._id || "",
     });
   };
 
@@ -215,7 +232,7 @@ export default function CreateTimetable() {
 
   return (
     <div className={`${PAGE} min-h-screen bg-slate-50 pb-24`}>
-      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="w-full max-w-375 mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="mb-6">
           <p className="text-xs uppercase tracking-[0.2em] font-semibold text-indigo-600">
             Faculty Panel
@@ -224,7 +241,7 @@ export default function CreateTimetable() {
             Create Timetable
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Create and manage class timetable
+            Create and assign sessions to any faculty
           </p>
         </div>
 
@@ -235,331 +252,340 @@ export default function CreateTimetable() {
           </div>
         )}
 
-        <div className="grid xl:grid-cols-12 gap-6">
-          <div className="xl:col-span-4">
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5">
-              <h2 className="text-lg font-bold text-slate-900 mb-5">
-                {editingId ? "Edit Slot" : "Add New Slot"}
-              </h2>
+        <div className="grid xl:grid-cols-[420px_minmax(0,1fr)] gap-6">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5">
+            <h2 className="text-lg font-bold text-slate-900 mb-5">
+              {editingId ? "Edit Slot" : "Add New Slot"}
+            </h2>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
-                      Department
-                    </label>
-                    <input
-                      value={meta.dept}
-                      onChange={(e) =>
-                        setMetaField("dept", e.target.value.toUpperCase())
-                      }
-                      className={INPUT}
-                      placeholder="CS"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
-                      Section
-                    </label>
-                    <input
-                      value={meta.section}
-                      onChange={(e) =>
-                        setMetaField("section", e.target.value.toUpperCase())
-                      }
-                      className={INPUT}
-                      placeholder="A"
-                    />
-                  </div>
-                </div>
-
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
-                    Semester
-                  </label>
-                  <select
-                    value={meta.semester}
-                    onChange={(e) => setMetaField("semester", e.target.value)}
-                    className={SELECT}
-                  >
-                    <option value="">Select semester</option>
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
-                      <option key={s} value={s}>
-                        Semester {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => loadTimetable(meta)}
-                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-white border border-slate-200 shadow-sm hover:bg-slate-50 font-semibold text-slate-700"
-                >
-                  <MdRefresh size={18} />
-                  Load Class Timetable
-                </button>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
-                    Day
-                  </label>
-                  <select
-                    value={form.day}
-                    onChange={(e) => setField("day", e.target.value)}
-                    className={SELECT}
-                  >
-                    {DAYS.map((day) => (
-                      <option key={day} value={day}>
-                        {DAY_LABEL[day]}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
-                    Slot Type
-                  </label>
-                  <select
-                    value={form.slotType}
-                    onChange={(e) => setField("slotType", e.target.value)}
-                    className={SELECT}
-                  >
-                    {SLOT_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
-                    Title
+                    Department
                   </label>
                   <input
-                    value={form.title}
-                    onChange={(e) => setField("title", e.target.value)}
+                    value={meta.dept}
+                    onChange={(e) =>
+                      setMetaField("dept", e.target.value.toUpperCase())
+                    }
                     className={INPUT}
-                    placeholder="Data Science"
-                    disabled={form.slotType === "BREAK"}
+                    placeholder="CS"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
-                    Subject
+                    Section
                   </label>
                   <input
-                    value={form.subject}
-                    onChange={(e) => setField("subject", e.target.value)}
+                    value={meta.section}
+                    onChange={(e) =>
+                      setMetaField("section", e.target.value.toUpperCase())
+                    }
                     className={INPUT}
-                    placeholder="DS01"
-                    disabled={form.slotType === "BREAK"}
+                    placeholder="A"
                   />
                 </div>
-
-                <div className="grid sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
-                      Start Time
-                    </label>
-                    <input
-                      type="time"
-                      value={form.startTime}
-                      onChange={(e) => setField("startTime", e.target.value)}
-                      className={INPUT}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
-                      End Time
-                    </label>
-                    <input
-                      type="time"
-                      value={form.endTime}
-                      onChange={(e) => setField("endTime", e.target.value)}
-                      className={INPUT}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
-                    Room
-                  </label>
-                  <input
-                    value={form.room}
-                    onChange={(e) => setField("room", e.target.value)}
-                    className={INPUT}
-                    placeholder="A-102"
-                  />
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className={`${BTN_PRIMARY} flex-1 justify-center py-3`}
-                  >
-                    {saving ? (
-                      "Saving..."
-                    ) : editingId ? (
-                      <>
-                        <MdEdit size={18} />
-                        Update Slot
-                      </>
-                    ) : (
-                      <>
-                        <MdAdd size={18} />
-                        Add Slot
-                      </>
-                    )}
-                  </button>
-
-                  {editingId && (
-                    <button
-                      type="button"
-                      onClick={resetForm}
-                      className="px-4 py-3 rounded-2xl border border-slate-200 bg-white font-semibold text-slate-700 hover:bg-slate-50"
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              </form>
-            </div>
-          </div>
-
-          <div className="xl:col-span-8">
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="border-b border-slate-200 px-5 sm:px-6 py-5 bg-linear-to-r from-slate-50 to-white">
-                <h2 className="text-2xl font-bold text-slate-900">
-                  Timetable Preview
-                </h2>
               </div>
 
-              <div className="p-4 sm:p-6">
-                {loading ? (
-                  <div className="py-16 text-center">
-                    <div className="w-10 h-10 mx-auto rounded-full border-4 border-slate-200 border-t-indigo-500 animate-spin" />
-                  </div>
-                ) : sessionRows.length === 0 ? (
-                  <div className="rounded-2xl bg-slate-50 border border-slate-200 p-12 text-center">
-                    <p className="text-lg font-semibold text-slate-700">
-                      No timetable slots found
-                    </p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <div className="min-w-245">
-                      <div className="grid grid-cols-6 gap-3 mb-3">
-                        <div className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-700">
-                          Time
-                        </div>
-                        {DAYS.map((day) => (
-                          <div
-                            key={day}
-                            className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-700 text-center"
-                          >
-                            {DAY_LABEL[day]}
-                          </div>
-                        ))}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                  Semester
+                </label>
+                <select
+                  value={meta.semester}
+                  onChange={(e) => setMetaField("semester", e.target.value)}
+                  className={SELECT}
+                >
+                  <option value="">Select semester</option>
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                    <option key={s} value={s}>
+                      Semester {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => loadTimetable(meta)}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-white border border-slate-200 shadow-sm hover:bg-slate-50 font-semibold text-slate-700"
+              >
+                <MdRefresh size={18} />
+                Load Class Timetable
+              </button>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                  Day
+                </label>
+                <select
+                  value={form.day}
+                  onChange={(e) => setField("day", e.target.value)}
+                  className={SELECT}
+                >
+                  {DAYS.map((day) => (
+                    <option key={day} value={day}>
+                      {DAY_LABEL[day]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                  Slot Type
+                </label>
+                <select
+                  value={form.slotType}
+                  onChange={(e) => setField("slotType", e.target.value)}
+                  className={SELECT}
+                >
+                  {SLOT_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {form.slotType !== "BREAK" && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                    Assign Faculty
+                  </label>
+                  <select
+                    value={form.faculty}
+                    onChange={(e) => setField("faculty", e.target.value)}
+                    className={SELECT}
+                  >
+                    <option value="">Select faculty</option>
+                    {facultyOptions.map((f) => (
+                      <option key={f._id} value={f._id}>
+                        {f.name || f.fullName || f.email}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                  Title
+                </label>
+                <input
+                  value={form.title}
+                  onChange={(e) => setField("title", e.target.value)}
+                  className={INPUT}
+                  placeholder="Data Science"
+                  disabled={form.slotType === "BREAK"}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                  Subject
+                </label>
+                <input
+                  value={form.subject}
+                  onChange={(e) => setField("subject", e.target.value)}
+                  className={INPUT}
+                  placeholder="DS2202"
+                  disabled={form.slotType === "BREAK"}
+                />
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                    Start Time
+                  </label>
+                  <input
+                    type="time"
+                    value={form.startTime}
+                    onChange={(e) => setField("startTime", e.target.value)}
+                    className={INPUT}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                    End Time
+                  </label>
+                  <input
+                    type="time"
+                    value={form.endTime}
+                    onChange={(e) => setField("endTime", e.target.value)}
+                    className={INPUT}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                  Room
+                </label>
+                <input
+                  value={form.room}
+                  onChange={(e) => setField("room", e.target.value)}
+                  className={INPUT}
+                  placeholder="A-101"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className={`${BTN_PRIMARY} flex-1 justify-center py-3`}
+                >
+                  {saving
+                    ? "Saving..."
+                    : editingId
+                      ? "Update Slot"
+                      : "Add Slot"}
+                </button>
+
+                {editingId && (
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="px-4 py-3 rounded-2xl border border-slate-200 bg-white font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-w-0">
+            <div className="border-b border-slate-200 px-5 sm:px-6 py-5 bg-linear-to-r from-slate-50 to-white">
+              <h2 className="text-2xl font-bold text-slate-900">
+                Timetable Preview
+              </h2>
+            </div>
+
+            <div className="p-4 sm:p-6">
+              {loading ? (
+                <div className="py-16 text-center">
+                  <div className="w-10 h-10 mx-auto rounded-full border-4 border-slate-200 border-t-indigo-500 animate-spin" />
+                </div>
+              ) : sessionRows.length === 0 ? (
+                <div className="rounded-2xl bg-slate-50 border border-slate-200 p-12 text-center">
+                  <p className="text-lg font-semibold text-slate-700">
+                    No timetable slots found
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <div className="min-w-245">
+                    <div className="grid grid-cols-6 gap-3 mb-3">
+                      <div className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-700">
+                        Time
                       </div>
+                      {DAYS.map((day) => (
+                        <div
+                          key={day}
+                          className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-700 text-center"
+                        >
+                          {DAY_LABEL[day]}
+                        </div>
+                      ))}
+                    </div>
 
-                      <div className="space-y-3">
-                        {sessionRows.map((row) => (
-                          <div key={row.key} className="grid grid-cols-6 gap-3">
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                              <p className="text-sm font-bold text-slate-900">
-                                {row.label}
-                              </p>
-                            </div>
+                    <div className="space-y-3">
+                      {sessionRows.map((row) => (
+                        <div key={row.key} className="grid grid-cols-6 gap-3">
+                          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                            <p className="text-sm font-bold text-slate-900">
+                              {row.label}
+                            </p>
+                          </div>
 
-                            {DAYS.map((day) => {
-                              const slot = gridMap[day]?.[row.key];
+                          {DAYS.map((day) => {
+                            const slot = gridMap[day]?.[row.key];
 
-                              return (
-                                <div
-                                  key={`${day}-${row.key}`}
-                                  className={`rounded-2xl border px-4 py-4 min-h-35 ${
-                                    slot
-                                      ? "bg-white border-slate-200 shadow-sm"
-                                      : "bg-slate-50 border-slate-100"
-                                  }`}
-                                >
-                                  {slot ? (
-                                    <div className="h-full flex flex-col justify-between">
-                                      <div>
-                                        <div className="flex items-start justify-between gap-2">
-                                          <h3 className="text-sm font-bold text-slate-900 leading-snug">
-                                            {slot.title || "Class"}
-                                          </h3>
-                                          <span
-                                            className={`shrink-0 text-[10px] font-semibold px-2 py-1 rounded-full border ${badgeClass(
-                                              slot.slotType,
-                                            )}`}
-                                          >
-                                            {slot.slotType}
-                                          </span>
-                                        </div>
+                            return (
+                              <div
+                                key={`${day}-${row.key}`}
+                                className={`rounded-2xl border p-3 min-h-42.5 ${
+                                  slot
+                                    ? "bg-white border-slate-200 shadow-sm"
+                                    : "bg-slate-50 border-slate-100"
+                                }`}
+                              >
+                                {slot ? (
+                                  <div className="h-full flex flex-col justify-between">
+                                    <div>
+                                      <div className="flex items-start justify-between gap-2">
+                                        <h3 className="text-sm font-bold text-slate-900 leading-snug wrap-break-word">
+                                          {slot.title || "Class"}
+                                        </h3>
+                                        <span
+                                          className={`shrink-0 text-[10px] font-semibold px-2 py-1 rounded-full border ${badgeClass(
+                                            slot.slotType,
+                                          )}`}
+                                        >
+                                          {slot.slotType}
+                                        </span>
+                                      </div>
 
-                                        <p className="mt-2 text-xs text-slate-600">
+                                      <div className="mt-2 space-y-1 text-xs text-slate-600">
+                                        <p>
                                           <span className="font-semibold">
                                             Subject:
                                           </span>{" "}
                                           {slot.subject || "—"}
                                         </p>
-                                        <p className="mt-1 text-xs text-slate-600">
+                                        <p>
                                           <span className="font-semibold">
                                             Faculty:
                                           </span>{" "}
-                                          {slot.faculty?.name ||
-                                            "Auto assigned"}
+                                          {slot.faculty?.name || "—"}
                                         </p>
-                                        <p className="mt-1 text-xs text-slate-600">
+                                        <p>
                                           <span className="font-semibold">
                                             Room:
                                           </span>{" "}
                                           {slot.room || "—"}
                                         </p>
                                       </div>
-
-                                      <div className="mt-4 flex gap-2">
-                                        <button
-                                          onClick={() => handleEdit(slot)}
-                                          className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 font-semibold text-sm"
-                                        >
-                                          <MdEdit size={16} />
-                                          Edit
-                                        </button>
-
-                                        <button
-                                          onClick={() => handleDelete(slot)}
-                                          className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 font-semibold text-sm"
-                                        >
-                                          <MdDelete size={16} />
-                                          Delete
-                                        </button>
-                                      </div>
                                     </div>
-                                  ) : (
-                                    <div className="h-full flex items-center justify-center text-sm text-slate-400">
-                                      —
+
+                                    <div className="mt-3 grid grid-cols-2 gap-2">
+                                      <button
+                                        onClick={() => handleEdit(slot)}
+                                        className="inline-flex items-center justify-center gap-1 px-2 py-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 font-semibold text-xs"
+                                      >
+                                        <MdEdit size={14} />
+                                        Edit
+                                      </button>
+
+                                      <button
+                                        onClick={() => handleDelete(slot)}
+                                        className="inline-flex items-center justify-center gap-1 px-2 py-2 rounded-xl bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 font-semibold text-xs"
+                                      >
+                                        <MdDelete size={14} />
+                                        Delete
+                                      </button>
                                     </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ))}
-                      </div>
+                                  </div>
+                                ) : (
+                                  <div className="h-full flex items-center justify-center text-sm text-slate-400">
+                                    —
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
                     </div>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

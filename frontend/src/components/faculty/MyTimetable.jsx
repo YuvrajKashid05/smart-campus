@@ -24,12 +24,6 @@ function sortByTime(slots = []) {
   );
 }
 
-function badgeClass(slotType = "") {
-  return String(slotType).toUpperCase() === "BREAK"
-    ? "bg-amber-50 text-amber-700 border-amber-200"
-    : "bg-emerald-50 text-emerald-700 border-emerald-200";
-}
-
 export default function MyTimetable() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -114,19 +108,9 @@ export default function MyTimetable() {
                         key={slot._id}
                         className="rounded-2xl border border-slate-200 p-4 bg-white"
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <h3 className="text-sm font-bold text-slate-900">
-                            {slot.title}
-                          </h3>
-                          <span
-                            className={`text-[10px] font-semibold px-2 py-1 rounded-full border ${badgeClass(
-                              slot.slotType,
-                            )}`}
-                          >
-                            {slot.slotType}
-                          </span>
-                        </div>
-
+                        <h3 className="text-sm font-bold text-slate-900">
+                          {slot.title}
+                        </h3>
                         <p className="mt-2 text-xs text-slate-600">
                           <span className="font-semibold">Time:</span>{" "}
                           {slot.startTime} - {slot.endTime}

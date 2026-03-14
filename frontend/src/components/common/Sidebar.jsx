@@ -13,6 +13,7 @@ import {
   MdMenu,
   MdMessage,
   MdQrCode2,
+  MdSchedule,
   MdSettings,
   MdWarning,
 } from "react-icons/md";
@@ -36,6 +37,7 @@ const navByRole = {
     ["Defaulter List", "/faculty/defaulters", MdWarning],
     ["Student Records", "/faculty/student-records", MdGroup],
     ["Timetable", "/faculty/timetable", MdCalendarMonth],
+    ["MyTimetable", "/faculty/my-timetable", MdSchedule],
     ["Create Notice", "/faculty/notice", MdDescription],
     ["Announcement", "/faculty/announcement", MdCampaign],
   ],

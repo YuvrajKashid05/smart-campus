@@ -1,4 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
+import { configDotenv } from "dotenv";
+configDotenv();
 
 if (!process.env.GEMINI_API_KEY) {
   console.warn("GEMINI_API_KEY is not set. Chatbot requests will fail until you add it to your environment.");

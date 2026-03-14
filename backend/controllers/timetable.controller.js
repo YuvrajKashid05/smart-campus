@@ -59,7 +59,7 @@ export async function createTimetable(req, res) {
       createdBy: req.user._id,
     };
 
-    if (payload.slotType === "LECTURE" && req.user.role === "faculty") {
+    if (payload.slotType === "LECTURE" && req.user.role === "FACULTY") {
       payload.faculty = req.user._id;
     } else {
       payload.faculty = null;
@@ -153,7 +153,7 @@ export async function updateTimetable(req, res) {
     }
 
     if (
-      req.user.role === "faculty" &&
+      req.user.role === "FACULTY" &&
       existing.faculty &&
       String(existing.faculty) !== String(req.user._id)
     ) {
@@ -177,7 +177,7 @@ export async function updateTimetable(req, res) {
     if ((payload.slotType || existing.slotType) === "BREAK") {
       payload.subject = "";
       payload.faculty = null;
-    } else if (req.user.role === "faculty") {
+    } else if (req.user.role === "FACULTY") {
       payload.faculty = req.user._id;
     }
 
@@ -204,7 +204,7 @@ export async function deleteTimetable(req, res) {
     }
 
     if (
-      req.user.role === "faculty" &&
+      req.user.role === "FACULTY" &&
       existing.faculty &&
       String(existing.faculty) !== String(req.user._id)
     ) {
