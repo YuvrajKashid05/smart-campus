@@ -9,6 +9,7 @@ import aiRoutes from "./routes/ai.routes.js";
 import announcementRoutes from "./routes/announcement.routes.js";
 import attendanceRoutes from "./routes/attendance.routes.js";
 import authRoutes from "./routes/auth.routes.js";
+import chatbotRoutes from "./routes/chatbot.routes.js";
 import complaintRoutes from "./routes/complaint.routes.js";
 import noticeRoutes from "./routes/notice.routes.js";
 import timetableRoutes from "./routes/timetable.routes.js";
@@ -28,6 +29,7 @@ app.get("/", (req, res) => {
 });
 
 // routes mount
+app.use("/api/ai", chatbotRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/notices", noticeRoutes);
@@ -56,3 +58,4 @@ connectDB(process.env.MONGO_URI)
     console.error("❌ DB connection error:", err?.message || err);
     process.exit(1);
   });
+

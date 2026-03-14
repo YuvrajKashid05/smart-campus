@@ -1,239 +1,106 @@
 import { useContext, useEffect, useState } from "react";
-import {
-  MdError,
-  MdPerson,
-  MdRefresh,
-  MdSchool,
-  MdSearch,
-} from "react-icons/md";
+import { MdSearch, MdRefresh, MdGroup } from "react-icons/md";
 import { AuthContext } from "../../context/AuthContext";
 import * as usersService from "../../services/users";
+import { PAGE, Loading, Empty, SectionCard, StatCard } from "../../ui";
 
-const StudentRecords = () => {
+export default function StudentRecords() {
   const { user } = useContext(AuthContext);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterSemester, setFilterSemester] = useState("ALL");
-  const [filterDept, setFilterDept] = useState(
-    user?.dept?.toUpperCase() || "ALL",
-  );
+  const [search, setSearch] = useState("");
+  const [filterSem, setFilterSem] = useState("ALL");
+  const [filterDept, setFilterDept] = useState(user?.dept?.toUpperCase() || "ALL");
 
-  useEffect(() => {
-    fetchStudents();
-  }, []);
-
-  const fetchStudents = async () => {
+  const load = () => {
     setLoading(true);
-    setError("");
-    try {
-      const res = await usersService.getAllUsers();
-      // service spreads response.data so users is at top-level
-      const allUsers = res?.users || res?.data || [];
-      const onlyStudents = allUsers.filter((u) => u.role === "STUDENT");
-      setStudents(onlyStudents);
-    } catch (err) {
-      const status = err.response?.status;
-      const msg = err.response?.data?.error || err.message || "Unknown error";
-      if (status === 401) setError("Session expired. Please log in again.");
-      else if (status === 403)
-        setError("Access denied. Faculty role required.");
-      else setError(`Failed to load students: ${msg}`);
-    } finally {
-      setLoading(false);
-    }
+    usersService.getAllUsers().then(d => setStudents((d?.users || []).filter(u => u.role === "STUDENT"))).catch(() => {}).finally(() => setLoading(false));
   };
+  useEffect(load, []);
 
-  const depts = [
-    ...new Set(students.map((s) => s.dept).filter(Boolean)),
-  ].sort();
-  const semesters = [
-    ...new Set(students.map((s) => s.semester).filter(Boolean)),
-  ].sort((a, b) => a - b);
-
-  const filtered = students.filter((s) => {
-    const matchDept =
-      filterDept === "ALL" || s.dept?.toUpperCase() === filterDept;
-    const matchSem =
-      filterSemester === "ALL" || String(s.semester) === filterSemester;
-    const matchSearch =
-      !searchTerm ||
-      s.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.rollNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.email?.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchDept && matchSem && matchSearch;
+  const depts = ["ALL", ...Array.from(new Set(students.map(s => s.dept).filter(Boolean)))];
+  const filtered = students.filter(s => {
+    const t = search.toLowerCase();
+    if (filterDept !== "ALL" && s.dept !== filterDept) return false;
+    if (filterSem !== "ALL" && String(s.semester) !== filterSem) return false;
+    return !t || s.name?.toLowerCase().includes(t) || s.rollNo?.toLowerCase().includes(t) || s.email?.toLowerCase().includes(t);
   });
 
-  if (loading)
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
-      </div>
-    );
+  if (loading) return <div className={PAGE}><Loading /></div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
+    <div className={PAGE + " fade-up"}>
+      <div className="max-w-5xl mx-auto">
+        <div className="flex items-start justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-              <MdSchool className="text-pink-500" /> Student Records
-            </h1>
-            <p className="text-gray-600 mt-1">
-              {user?.dept ? `Your dept: ${user.dept}` : "All departments"} —{" "}
-              {students.length} total students
-            </p>
+            <h1 className="text-2xl font-bold text-slate-900">Student Records</h1>
+            <p className="text-slate-500 text-sm mt-0.5">{filtered.length} students shown</p>
           </div>
-          <button
-            onClick={fetchStudents}
-            className="flex items-center gap-1 px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
-          >
-            <MdRefresh size={18} /> Refresh
+          <button onClick={load} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition">
+            <MdRefresh size={15} />Refresh
           </button>
         </div>
 
-        {error && (
-          <div className="mb-6 flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg p-4">
-            <MdError className="text-red-500 shrink-0 mt-0.5" size={20} />
-            <div>
-              <p className="text-red-800 font-semibold text-sm">
-                Error loading student records
-              </p>
-              <p className="text-red-700 text-sm mt-1">{error}</p>
-            </div>
-          </div>
-        )}
+        <div className="grid grid-cols-3 gap-3 mb-5">
+          <StatCard label="Total Students" value={students.length}                                color="#6366f1" icon={MdGroup} />
+          <StatCard label="Showing"        value={filtered.length}                               color="#10b981" icon={MdGroup} />
+          <StatCard label="Active"         value={students.filter(s => s.isActive !== false).length} color="#f59e0b" icon={MdGroup} />
+        </div>
 
-        {/* Filters */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6 flex flex-wrap gap-3 items-center">
-          <div className="flex items-center gap-2 flex-1 min-w-48">
-            <MdSearch size={20} className="text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search by name, roll no, email…"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-            />
+        <div className="flex flex-wrap gap-3 mb-5">
+          <div className="relative">
+            <MdSearch size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Name, roll or email…"
+              className="pl-8 pr-4 py-2 rounded-xl border border-slate-200 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-50 outline-none bg-white w-52" />
           </div>
-
-          <select
-            value={filterDept}
-            onChange={(e) => setFilterDept(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-          >
-            <option value="ALL">All Departments</option>
-            {depts.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
+          <select value={filterDept} onChange={e => setFilterDept(e.target.value)} className="px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white focus:border-indigo-500 outline-none">
+            {depts.map(d => <option key={d} value={d}>{d === "ALL" ? "All Depts" : d}</option>)}
           </select>
-
-          <select
-            value={filterSemester}
-            onChange={(e) => setFilterSemester(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-          >
+          <select value={filterSem} onChange={e => setFilterSem(e.target.value)} className="px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white focus:border-indigo-500 outline-none">
             <option value="ALL">All Semesters</option>
-            {semesters.map((s) => (
-              <option key={s} value={String(s)}>
-                Semester {s}
-              </option>
-            ))}
+            {[1,2,3,4,5,6,7,8].map(s => <option key={s} value={String(s)}>Semester {s}</option>)}
           </select>
-
-          <span className="text-sm text-gray-500 whitespace-nowrap">
-            Showing {filtered.length}
-          </span>
         </div>
 
-        {/* Table */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-100">
-                <tr>
-                  {[
-                    "#",
-                    "Name",
-                    "Roll No",
-                    "Email",
-                    "Dept",
-                    "Semester",
-                    "Section",
-                    "Mobile",
-                    "Status",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap"
-                    >
-                      {h}
-                    </th>
+        <SectionCard>
+          {filtered.length === 0 ? <Empty icon={MdGroup} title="No students found" />
+          : <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-slate-100">
+                  {["Student","Roll No","Department","Sem · Sec","Contact","Status"].map(h => (
+                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((s, i) => (
-                  <tr key={s._id} className="border-b hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-400">{i + 1}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
-                          <MdPerson className="text-blue-500" size={16} />
+                </tr></thead>
+                <tbody className="divide-y divide-slate-50">
+                  {filtered.map(s => (
+                    <tr key={s._id} className="hover:bg-slate-50 transition">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs shrink-0">
+                            {s.name?.charAt(0)?.toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-slate-900 text-sm">{s.name}</p>
+                            <p className="text-xs text-slate-400">{s.email}</p>
+                          </div>
                         </div>
-                        <span className="font-semibold text-gray-900">
-                          {s.name}
+                      </td>
+                      <td className="px-4 py-3 text-slate-700 font-mono text-xs">{s.rollNo || "—"}</td>
+                      <td className="px-4 py-3"><span className="text-xs font-semibold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full">{s.dept || "—"}</span></td>
+                      <td className="px-4 py-3 text-slate-600 text-xs">{s.semester ? `Sem ${s.semester}` : "—"}{s.section ? ` · ${s.section}` : ""}</td>
+                      <td className="px-4 py-3 text-slate-500 text-xs">{s.mobileNumber || "—"}</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${s.isActive !== false ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"}`}>
+                          {s.isActive !== false ? "Active" : "Inactive"}
                         </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-blue-700">
-                      {s.rollNo || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{s.email}</td>
-                    <td className="px-4 py-3 text-gray-700">{s.dept || "—"}</td>
-                    <td className="px-4 py-3">
-                      {s.semester ? (
-                        <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-semibold">
-                          Sem {s.semester}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="px-4 py-3">{s.section || "—"}</td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {s.mobileNumber || "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`px-2 py-1 rounded text-xs font-semibold ${s.isActive !== false ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}
-                      >
-                        {s.isActive !== false ? "Active" : "Inactive"}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {filtered.length === 0 && !error && (
-              <div className="text-center py-12">
-                <MdSchool className="text-gray-200 mx-auto mb-3" size={48} />
-                <p className="text-gray-500">
-                  {students.length === 0
-                    ? "No students registered yet."
-                    : "No students match your filters."}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>}
+        </SectionCard>
       </div>
     </div>
   );
-};
-
-export default StudentRecords;
+}

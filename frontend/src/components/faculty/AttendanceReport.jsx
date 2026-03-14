@@ -1,461 +1,163 @@
 import { useEffect, useState } from "react";
-import {
-  MdBarChart,
-  MdCalendarMonth,
-  MdCheckCircle,
-  MdClose,
-  MdError,
-  MdGroup,
-  MdPerson,
-  MdPersonAdd,
-  MdRefresh,
-  MdSearch,
-} from "react-icons/md";
+import { MdBarChart, MdSearch, MdPersonAdd, MdRefresh, MdCheckCircle, MdClose, MdPerson } from "react-icons/md";
 import * as attendanceService from "../../services/attendance";
 import * as usersService from "../../services/users";
+import { PAGE, INPUT, BTN_PRIMARY, BTN_GHOST, Loading, SectionCard, Alert, Empty } from "../../ui";
 
-const AttendanceReport = () => {
+export default function AttendanceReport() {
   const [sessions, setSessions] = useState([]);
-  const [selectedSession, setSelectedSession] = useState(null);
+  const [selected, setSelected] = useState(null);
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [recordsLoading, setRecordsLoading] = useState(false);
+  const [recLoading, setRecLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // Manual mark state
-  const [showManualPanel, setShowManualPanel] = useState(false);
-  const [allStudents, setAllStudents] = useState([]);
-  const [studentsLoading, setStudentsLoading] = useState(false);
-  const [studentSearch, setStudentSearch] = useState("");
+  const [showManual, setShowManual] = useState(false);
+  const [students, setStudents] = useState([]);
+  const [studSearch, setStudSearch] = useState("");
   const [markingId, setMarkingId] = useState(null);
 
-  useEffect(() => {
-    fetchSessions();
-  }, []);
+  const load = async () => {
+    setLoading(true); setError("");
+    try { const d = await attendanceService.getMySessions(); if (d?.ok) setSessions(d.sessions||[]); else setError(d?.error||"Failed."); }
+    catch(err){ setError(err.response?.data?.error||err.message||"Failed to load sessions."); }
+    finally { setLoading(false); }
+  };
+  useEffect(load,[]);
 
-  const fetchSessions = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const data = await attendanceService.getMySessions();
-      if (data?.ok) setSessions(data.sessions || []);
-      else setError(data?.error || "Failed to load sessions.");
-    } catch (err) {
-      const status = err.response?.status;
-      if (status === 404)
-        setError(
-          "Backend not updated. Restart the server after replacing files.",
-        );
-      else
-        setError(
-          err.response?.data?.error ||
-            err.message ||
-            "Failed to load sessions.",
-        );
-    } finally {
-      setLoading(false);
-    }
+  const flash=(m,t="success")=>{ if(t==="success"){setSuccess(m);setTimeout(()=>setSuccess(""),3000);}else{setError(m);setTimeout(()=>setError(""),4000);} };
+
+  const viewSession = async (s) => {
+    setSelected(s); setShowManual(false); setStudSearch(""); setRecLoading(true);
+    try { const d = await attendanceService.getSessionRecords(s._id); setRecords(d?.records||[]); }
+    catch { setRecords([]); } finally { setRecLoading(false); }
   };
 
-  const viewRecords = async (session) => {
-    setSelectedSession(session);
-    setShowManualPanel(false);
-    setStudentSearch("");
-    setRecordsLoading(true);
+  const openManual = async () => {
+    setShowManual(true);
+    if (students.length > 0) return;
     try {
-      const data = await attendanceService.getSessionRecords(session._id);
-      setRecords(data?.records || []);
-    } catch {
-      setRecords([]);
-    } finally {
-      setRecordsLoading(false);
-    }
+      const d = await usersService.getAllUsers({ role:"STUDENT", dept:selected?.dept });
+      setStudents((d?.users||[]).filter(u=>u.role==="STUDENT" && (!selected?.dept || u.dept===selected.dept)));
+    } catch {}
   };
 
-  // Load all students for this session's dept/section/semester
-  const openManualPanel = async () => {
-    setShowManualPanel(true);
-    if (allStudents.length > 0) return; // already loaded
-    setStudentsLoading(true);
+  const handleMark = async (studentId) => {
+    setMarkingId(studentId);
     try {
-      const data = await usersService.getAllUsers();
-      const students = (data?.users || []).filter((u) => {
-        if (u.role !== "STUDENT") return false;
-        if (
-          selectedSession.dept &&
-          u.dept?.toUpperCase() !== selectedSession.dept
-        )
-          return false;
-        if (
-          selectedSession.section &&
-          u.section?.toUpperCase() !== selectedSession.section
-        )
-          return false;
-        if (
-          selectedSession.semester > 0 &&
-          u.semester !== selectedSession.semester
-        )
-          return false;
-        return true;
-      });
-      setAllStudents(students);
-    } catch {
-      setError("Failed to load student list.");
-    } finally {
-      setStudentsLoading(false);
-    }
-  };
-
-  const handleManualMark = async (student) => {
-    setMarkingId(student._id);
-    setError("");
-    setSuccess("");
-    try {
-      const res = await attendanceService.manualMarkStudent(
-        selectedSession._id,
-        student._id,
-      );
+      const res = await attendanceService.manualMarkStudent(selected._id, studentId);
       if (res.ok) {
-        if (res.alreadyMarked) {
-          setSuccess(`${student.name} was already marked present.`);
-        } else {
-          setSuccess(`✅ ${student.name} marked present successfully!`);
-          // Refresh records
-          const updated = await attendanceService.getSessionRecords(
-            selectedSession._id,
-          );
-          setRecords(updated?.records || []);
-        }
-        setTimeout(() => setSuccess(""), 4000);
-      } else {
-        setError(res.error || "Failed to mark attendance.");
-      }
-    } catch (err) {
-      setError(err.response?.data?.error || "Failed to mark attendance.");
-    } finally {
-      setMarkingId(null);
-    }
+        flash("Marked present!");
+        const d = await attendanceService.getSessionRecords(selected._id);
+        setRecords(d?.records||[]);
+      } else flash(res.error||"Failed.","error");
+    } catch(err){ flash(err.response?.data?.error||"Failed.","error"); }
+    finally { setMarkingId(null); }
   };
 
-  const markedIds = new Set(records.map((r) => String(r.student?._id)));
-
-  const filteredStudents = allStudents.filter((s) => {
-    if (!studentSearch) return true;
-    return (
-      s.name?.toLowerCase().includes(studentSearch.toLowerCase()) ||
-      s.rollNo?.toLowerCase().includes(studentSearch.toLowerCase())
-    );
-  });
-
-  if (loading)
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
-      </div>
-    );
+  const markedIds = new Set(records.map(r=>r.student?._id||r.student?.toString()));
+  const filtStudents = students.filter(s => !studSearch || s.name.toLowerCase().includes(studSearch.toLowerCase()) || s.rollNo?.toLowerCase().includes(studSearch.toLowerCase()));
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-              <MdBarChart className="text-indigo-500" /> Attendance Report
-            </h1>
-            <p className="text-gray-500 text-sm mt-1">
-              View sessions, records, and manually mark absent students
-            </p>
-          </div>
-          <button
-            onClick={fetchSessions}
-            className="flex items-center gap-1 px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
-          >
-            <MdRefresh size={18} /> Refresh
-          </button>
+    <div className={PAGE+" fade-up"}>
+      <div className="max-w-5xl mx-auto">
+        <div className="flex items-start justify-between mb-6">
+          <div><h1 className="text-2xl font-bold text-slate-900">Attendance Report</h1><p className="text-slate-500 text-sm mt-0.5">View sessions and manually mark students</p></div>
+          <button onClick={load} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition"><MdRefresh size={15}/>Refresh</button>
         </div>
 
-        {error && (
-          <div className="mb-4 flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-4">
-            <MdError className="text-red-500 shrink-0 mt-0.5" size={20} />
-            <p className="text-red-800 text-sm">{error}</p>
-          </div>
-        )}
-        {success && (
-          <div className="mb-4 flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl p-4">
-            <MdCheckCircle className="text-green-500 shrink-0" size={20} />
-            <p className="text-green-800 text-sm font-medium">{success}</p>
-          </div>
-        )}
+        {error && <div className="mb-4"><Alert type="error">{error}</Alert></div>}
+        {success && <div className="mb-4"><Alert type="success">{success}</Alert></div>}
 
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Sessions list — left column */}
-          <div>
-            <h2 className="text-base font-bold text-gray-800 mb-3 flex items-center gap-2">
-              <MdCalendarMonth className="text-blue-500" /> My Sessions (
-              {sessions.length})
-            </h2>
-            {sessions.length === 0 && !error ? (
-              <div className="bg-white rounded-xl shadow p-8 text-center">
-                <MdBarChart className="text-gray-200 mx-auto mb-2" size={40} />
-                <p className="text-gray-500 text-sm">
-                  No sessions yet. Generate a QR code first.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
-                {sessions.map((s) => {
-                  const expired = new Date(s.expiresAt) < new Date();
-                  const isSelected = selectedSession?._id === s._id;
-                  return (
-                    <div
-                      key={s._id}
-                      onClick={() => viewRecords(s)}
-                      className={`bg-white rounded-xl shadow-sm p-4 cursor-pointer border-2 transition ${isSelected ? "border-blue-500 shadow-md" : "border-transparent hover:border-blue-200"}`}
-                    >
-                      <div className="flex justify-between items-start">
-                        <p className="font-bold text-gray-900 text-sm">
-                          {s.course}
-                        </p>
-                        <span
-                          className={`text-xs px-2 py-0.5 rounded-full font-semibold ${expired ? "bg-gray-100 text-gray-500" : "bg-green-100 text-green-700"}`}
-                        >
-                          {expired ? "Ended" : "Active"}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {s.dept}
-                        {s.section ? ` · Sec ${s.section}` : ""}
-                        {s.semester > 0 ? ` · Sem ${s.semester}` : ""}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
-                        <MdCalendarMonth size={11} />
-                        {new Date(s.createdAt).toLocaleDateString()}{" "}
-                        {new Date(s.createdAt).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Records + manual mark — right 2 columns */}
-          <div className="lg:col-span-2">
-            {!selectedSession ? (
-              <div className="bg-white rounded-xl shadow p-12 text-center">
-                <MdGroup className="text-gray-200 mx-auto mb-3" size={56} />
-                <p className="text-gray-500">
-                  Select a session from the left to view attendance
-                </p>
-              </div>
-            ) : (
-              <>
-                {/* Session info bar */}
-                <div className="bg-indigo-600 text-white rounded-xl px-5 py-3 mb-4 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="font-bold">{selectedSession.course}</p>
-                    <p className="text-indigo-200 text-xs">
-                      {selectedSession.dept}
-                      {selectedSession.section
-                        ? ` · Sec ${selectedSession.section}`
-                        : ""}
-                      {selectedSession.semester > 0
-                        ? ` · Sem ${selectedSession.semester}`
-                        : ""}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="bg-white text-indigo-700 text-xs font-bold px-3 py-1 rounded-full">
-                      {records.length} present
-                    </span>
-                    {/* Manual mark button */}
-                    <button
-                      onClick={openManualPanel}
-                      className="flex items-center gap-1 bg-white text-indigo-700 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition"
-                    >
-                      <MdPersonAdd size={15} /> Mark Manually
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  {/* Present students */}
-                  <div className="bg-white rounded-xl shadow overflow-hidden">
-                    <div className="px-4 py-3 bg-gray-50 border-b flex items-center gap-2">
-                      <MdCheckCircle className="text-green-500" size={18} />
-                      <h3 className="font-semibold text-gray-800 text-sm">
-                        Present Students
-                      </h3>
-                    </div>
-                    {recordsLoading ? (
-                      <div className="p-8 flex justify-center">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
-                      </div>
-                    ) : records.length === 0 ? (
-                      <div className="p-8 text-center text-gray-400 text-sm">
-                        No students marked yet
-                      </div>
-                    ) : (
-                      <div className="divide-y max-h-80 overflow-y-auto">
-                        {records.map((r, i) => (
-                          <div
-                            key={r._id}
-                            className="flex items-center gap-3 px-4 py-2.5"
-                          >
-                            <span className="text-gray-300 text-xs w-5">
-                              {i + 1}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-gray-900 text-sm truncate">
-                                {r.student?.name}
-                              </p>
-                              <p className="text-xs text-gray-400">
-                                {r.student?.rollNo} · {r.student?.dept}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <MdCheckCircle
-                                className="text-green-500"
-                                size={18}
-                              />
-                              <p className="text-xs text-gray-400">
-                                {new Date(r.createdAt).toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Manual mark panel */}
-                  <div className="bg-white rounded-xl shadow overflow-hidden">
-                    <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <MdPersonAdd className="text-blue-500" size={18} />
-                        <h3 className="font-semibold text-gray-800 text-sm">
-                          Mark Manually
-                        </h3>
-                      </div>
-                      {showManualPanel && (
-                        <button
-                          onClick={() => setShowManualPanel(false)}
-                          className="text-gray-400 hover:text-gray-600"
-                        >
-                          <MdClose size={16} />
-                        </button>
-                      )}
-                    </div>
-
-                    {!showManualPanel ? (
-                      <div className="p-8 text-center">
-                        <MdPersonAdd
-                          className="text-gray-200 mx-auto mb-3"
-                          size={40}
-                        />
-                        <p className="text-gray-500 text-sm mb-4">
-                          If a student couldn't scan the QR, mark them present
-                          here.
-                        </p>
-                        <button
-                          onClick={openManualPanel}
-                          className="flex items-center gap-2 mx-auto bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 text-sm font-semibold transition"
-                        >
-                          <MdPersonAdd size={16} /> Open Student List
-                        </button>
-                      </div>
-                    ) : studentsLoading ? (
-                      <div className="p-8 flex justify-center">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
-                      </div>
-                    ) : (
-                      <>
-                        {/* Search */}
-                        <div className="px-3 pt-3 pb-2 border-b">
-                          <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-1.5">
-                            <MdSearch size={16} className="text-gray-400" />
-                            <input
-                              type="text"
-                              placeholder="Search name or roll no…"
-                              value={studentSearch}
-                              onChange={(e) => setStudentSearch(e.target.value)}
-                              className="flex-1 bg-transparent outline-none text-sm"
-                            />
-                          </div>
+        {loading ? <Loading/> : (
+          <div className="grid lg:grid-cols-5 gap-5">
+            {/* Sessions list */}
+            <div className="lg:col-span-2">
+              <SectionCard title={`Sessions (${sessions.length})`}>
+                {sessions.length===0 ? <Empty icon={MdBarChart} title="No sessions yet"/>
+                :<div className="divide-y divide-slate-50 max-h-[70vh] overflow-y-auto">
+                  {sessions.map(s=>{
+                    const expired = new Date(s.expiresAt)<new Date();
+                    const active = selected?._id===s._id;
+                    return (
+                      <button key={s._id} onClick={()=>viewSession(s)} className={`w-full text-left flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 transition ${active?"bg-indigo-50":""}`}>
+                        <div className={`w-2 h-2 rounded-full shrink-0 ${expired?"bg-slate-300":"bg-emerald-500 animate-pulse"}`}/>
+                        <div className="flex-1 min-w-0">
+                          <p className={`font-semibold text-sm truncate ${active?"text-indigo-700":"text-slate-900"}`}>{s.course}</p>
+                          <p className="text-xs text-slate-500">{s.dept}{s.section?` · ${s.section}`:""} · {new Date(s.createdAt).toLocaleDateString()}</p>
                         </div>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold shrink-0 ${expired?"bg-slate-100 text-slate-500":"bg-emerald-50 text-emerald-700"}`}>
+                          {expired?"Ended":"Live"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>}
+              </SectionCard>
+            </div>
 
-                        {filteredStudents.length === 0 ? (
-                          <div className="p-6 text-center text-gray-400 text-sm">
-                            No students found
-                          </div>
-                        ) : (
-                          <div className="divide-y max-h-72 overflow-y-auto">
-                            {filteredStudents.map((student) => {
-                              const alreadyMarked = markedIds.has(
-                                String(student._id),
-                              );
-                              const isMarking = markingId === student._id;
-                              return (
-                                <div
-                                  key={student._id}
-                                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50"
-                                >
-                                  <div className="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
-                                    <MdPerson
-                                      className="text-blue-500"
-                                      size={14}
-                                    />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="font-semibold text-gray-900 text-sm truncate">
-                                      {student.name}
-                                    </p>
-                                    <p className="text-xs text-gray-400">
-                                      {student.rollNo} · {student.section}
-                                    </p>
-                                  </div>
-                                  {alreadyMarked ? (
-                                    <span className="flex items-center gap-1 text-xs text-green-600 font-semibold">
-                                      <MdCheckCircle size={15} /> Present
-                                    </span>
-                                  ) : (
-                                    <button
-                                      onClick={() => handleManualMark(student)}
-                                      disabled={isMarking}
-                                      className="flex items-center gap-1 bg-blue-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition whitespace-nowrap"
-                                    >
-                                      {isMarking ? (
-                                        <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" />
-                                      ) : (
-                                        <MdPersonAdd size={13} />
-                                      )}
-                                      {isMarking ? "" : "Mark"}
-                                    </button>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
+            {/* Records panel */}
+            <div className="lg:col-span-3">
+              {!selected ? (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm h-48 flex items-center justify-center">
+                  <div className="text-center"><MdBarChart size={40} className="text-slate-200 mx-auto mb-2"/><p className="text-slate-400 text-sm">Select a session to view records</p></div>
                 </div>
-              </>
-            )}
+              ) : (
+                <SectionCard
+                  title={<span>{selected.course} <span className="text-slate-400 font-normal">· {records.length} present</span></span>}
+                  action={<button onClick={openManual} className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition"><MdPersonAdd size={14}/>Manual Mark</button>}
+                >
+                  {recLoading ? <div className="p-8 flex justify-center"><div className="w-5 h-5 rounded-full border-2 border-slate-200 border-t-indigo-500 animate-spin"/></div>
+                  : !showManual ? (
+                    <div className="divide-y divide-slate-50 max-h-[60vh] overflow-y-auto">
+                      {records.length===0 ? <Empty icon={MdPerson} title="No attendance yet"/> :
+                        records.map((r,i)=>(
+                          <div key={r._id||i} className="flex items-center gap-3 px-4 py-3">
+                            <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center text-xs font-bold text-emerald-700 shrink-0">
+                              {r.student?.name?.charAt(0)?.toUpperCase()||"?"}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-slate-900 text-sm truncate">{r.student?.name||"Unknown"}</p>
+                              <p className="text-xs text-slate-400">{r.student?.rollNo||""} · {new Date(r.markedAt||r.createdAt).toLocaleTimeString()}</p>
+                            </div>
+                            <MdCheckCircle size={16} className="text-emerald-500 shrink-0"/>
+                          </div>
+                        ))
+                      }
+                    </div>
+                  ) : (
+                    <div className="p-4">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="relative flex-1"><MdSearch size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={studSearch} onChange={e=>setStudSearch(e.target.value)} placeholder="Search students…" className="w-full pl-8 pr-4 py-2 rounded-xl border border-slate-200 text-sm focus:border-indigo-500 outline-none bg-white"/></div>
+                        <button onClick={()=>setShowManual(false)} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100"><MdClose size={16}/></button>
+                      </div>
+                      <div className="space-y-1 max-h-[50vh] overflow-y-auto">
+                        {filtStudents.map(s=>{
+                          const present = markedIds.has(s._id);
+                          return (
+                            <div key={s._id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50 transition">
+                              <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 shrink-0">
+                                {s.name?.charAt(0)?.toUpperCase()}
+                              </div>
+                              <div className="flex-1 min-w-0"><p className="font-semibold text-sm text-slate-900 truncate">{s.name}</p><p className="text-xs text-slate-400">{s.rollNo}</p></div>
+                              {present ? <span className="text-xs font-semibold bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full flex items-center gap-1"><MdCheckCircle size={12}/>Present</span>
+                              : <button onClick={()=>handleMark(s._id)} disabled={markingId===s._id} className="text-xs font-semibold bg-indigo-600 text-white px-3 py-1 rounded-full hover:bg-indigo-700 transition disabled:opacity-50">
+                                  {markingId===s._id?<div className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin"/>:"Mark"}
+                                </button>}
+                            </div>
+                          );
+                        })}
+                        {filtStudents.length===0&&<p className="text-slate-400 text-sm text-center py-4">No students found.</p>}
+                      </div>
+                    </div>
+                  )}
+                </SectionCard>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
-};
-
-export default AttendanceReport;
+}

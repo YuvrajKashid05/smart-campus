@@ -3,21 +3,21 @@ import {
   MdCameraAlt,
   MdCheckCircle,
   MdClose,
-  MdError,
   MdInfo,
   MdQrCode2,
   MdWarning,
 } from "react-icons/md";
 import * as attendanceService from "../../services/attendance";
+import { Alert, PAGE } from "../../ui";
 
-const MarkAttendance = () => {
+export default function MarkAttendance() {
   const [qrInput, setQrInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [cameraActive, setCameraActive] = useState(false);
   const [scanning, setScanning] = useState(false);
-
+  const [detected, setDetected] = useState(false);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -25,8 +25,7 @@ const MarkAttendance = () => {
 
   const startCamera = async () => {
     setError("");
-    setSuccess("");
-
+    setDetected(false);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -35,10 +34,8 @@ const MarkAttendance = () => {
           height: { ideal: 720 },
         },
       });
-
       streamRef.current = stream;
       setCameraActive(true);
-
       setTimeout(() => {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -47,52 +44,41 @@ const MarkAttendance = () => {
         }
       }, 150);
     } catch (err) {
-      if (err.name === "NotAllowedError") {
+      if (err.name === "NotAllowedError")
         setError(
-          "Camera permission denied. Please allow camera access in your browser settings.",
+          "Camera permission denied. Allow camera access in browser settings.",
         );
-      } else if (err.name === "NotFoundError") {
+      else if (err.name === "NotFoundError")
         setError("No camera found on this device.");
-      } else {
-        setError("Unable to access camera: " + err.message);
-      }
+      else setError("Unable to access camera: " + err.message);
     }
   };
 
   const stopCamera = () => {
     setScanning(false);
     setCameraActive(false);
-
+    setDetected(false);
     if (rafRef.current) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
-
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
-
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
+    if (videoRef.current) videoRef.current.srcObject = null;
   };
 
   useEffect(() => {
     if (!scanning) return;
-
     let active = true;
-
     const runScan = async () => {
       try {
         const jsQR = (await import("jsqr")).default;
-
         const tick = () => {
           if (!active) return;
-
           const video = videoRef.current;
           const canvas = canvasRef.current;
-
           if (
             !video ||
             !canvas ||
@@ -102,76 +88,58 @@ const MarkAttendance = () => {
             rafRef.current = requestAnimationFrame(tick);
             return;
           }
-
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
-
           const ctx = canvas.getContext("2d");
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(img.data, img.width, img.height, {
             inversionAttempts: "dontInvert",
           });
-
           if (code?.data) {
             active = false;
+            setDetected(true);
             stopCamera();
-
             let token = code.data;
             try {
-              const parsed = JSON.parse(code.data);
-              token = parsed.token || parsed.qrToken || code.data;
-            } catch {
-              // raw token
-            }
-
-            handleMarkAttendance(token);
+              const p = JSON.parse(code.data);
+              token = p.token || p.qrToken || code.data;
+            } catch {}
+            handleMark(token);
             return;
           }
-
           rafRef.current = requestAnimationFrame(tick);
         };
-
         rafRef.current = requestAnimationFrame(tick);
       } catch {
-        setError("QR scanner failed to load. Use manual token entry below.");
+        setError("QR scanner failed. Use manual entry below.");
         stopCamera();
       }
     };
-
     runScan();
-
     return () => {
       active = false;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
   }, [scanning]);
 
-  useEffect(() => {
-    return () => stopCamera();
-  }, []);
+  useEffect(() => () => stopCamera(), []);
 
-  const handleMarkAttendance = async (token) => {
+  const handleMark = async (token) => {
     if (!token?.trim()) return;
-
     setLoading(true);
     setError("");
     setSuccess("");
-
     try {
-      const result = await attendanceService.markAttendance(token.trim());
-
-      if (result.ok) {
+      const res = await attendanceService.markAttendance(token.trim());
+      if (res.ok) {
         setSuccess(
-          result.alreadyMarked
+          res.alreadyMarked
             ? "Attendance already marked for this session."
             : "✅ Attendance marked successfully!",
         );
         setQrInput("");
-      } else {
-        setError(result.error || "Failed to mark attendance.");
-      }
+      } else setError(res.error || "Failed to mark attendance.");
     } catch (err) {
       setError(
         err.response?.data?.error || "Invalid QR token or session expired.",
@@ -181,203 +149,264 @@ const MarkAttendance = () => {
     }
   };
 
-  const handleManualSubmit = (e) => {
+  const handleManual = (e) => {
     e.preventDefault();
     if (!qrInput.trim()) return;
-
     try {
-      const parsed = JSON.parse(qrInput);
-      handleMarkAttendance(parsed.token || parsed.qrToken || qrInput);
+      const p = JSON.parse(qrInput);
+      handleMark(p.token || p.qrToken || qrInput);
     } catch {
-      handleMarkAttendance(qrInput.trim());
+      handleMark(qrInput.trim());
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-lg">
+    <div className={PAGE + " fade-up"}>
+      <div className="max-w-md mx-auto">
         <div className="mb-6 text-center">
-          <h1 className="flex items-center justify-center gap-2 text-2xl font-bold text-gray-900">
-            <MdQrCode2 className="text-blue-500" size={28} />
-            Mark Attendance
-          </h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Scan the QR code shown by your teacher
+          <h1 className="text-2xl font-bold text-slate-900">Mark Attendance</h1>
+          <p className="text-slate-500 text-sm mt-0.5">
+            Scan the QR code displayed by your teacher
           </p>
         </div>
 
         {loading && (
-          <div className="mb-4 flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4">
-            <div className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
-            <p className="text-sm font-medium text-blue-800">
-              Marking your attendance…
+          <div className="mb-4 flex items-center gap-3 p-3.5 bg-blue-50 border border-blue-200 rounded-2xl">
+            <div className="w-4 h-4 rounded-full border-2 border-blue-300 border-t-blue-600 animate-spin shrink-0" />
+            <p className="text-sm text-blue-800 font-medium">
+              Marking attendance…
             </p>
           </div>
         )}
-
         {error && (
-          <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4">
-            <MdError className="mt-0.5 shrink-0 text-red-500" size={20} />
-            <p className="text-sm text-red-800">{error}</p>
+          <div className="mb-4">
+            <Alert type="error">{error}</Alert>
           </div>
         )}
-
         {success && (
-          <div className="mb-4 flex items-center gap-2 rounded-xl border border-green-300 bg-green-50 p-4">
-            <MdCheckCircle className="shrink-0 text-green-500" size={24} />
-            <p className="text-sm font-semibold text-green-800">{success}</p>
+          <div className="mb-4 flex items-center gap-2 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl">
+            <MdCheckCircle size={22} className="text-emerald-500 shrink-0" />
+            <p className="text-emerald-800 text-sm font-semibold">{success}</p>
           </div>
         )}
 
-        <div className="mb-5 overflow-hidden rounded-2xl bg-white shadow-lg">
+        {/* Camera card */}
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden mb-5">
           {!cameraActive ? (
             <div className="p-8 text-center">
-              <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-blue-100">
-                <MdCameraAlt className="text-blue-500" size={40} />
+              <div className="w-20 h-20 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <MdQrCode2 size={42} className="text-indigo-400" />
               </div>
-              <p className="mb-1 font-semibold text-gray-800">
-                Open Camera to Scan
+              <p className="font-semibold text-slate-900 mb-1.5">
+                Scan QR Code
               </p>
-              <p className="mb-6 text-sm text-gray-500">
-                The camera will automatically detect the QR code and mark your
-                attendance instantly.
+              <p className="text-slate-500 text-xs mb-6 max-w-xs mx-auto">
+                Camera will auto-detect and mark your attendance instantly — no
+                button needed.
               </p>
               <button
                 onClick={startCamera}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-base font-semibold text-white transition hover:bg-blue-700 active:bg-blue-800"
+                className="inline-flex items-center gap-2 px-7 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl transition active:scale-95 text-sm"
               >
-                <MdCameraAlt size={20} />
+                <MdCameraAlt size={18} />
                 Open Camera
               </button>
             </div>
           ) : (
-            <div className="relative h-95 bg-black sm:h-105">
+            <div className="relative bg-black" style={{ height: 360 }}>
               <video
                 ref={videoRef}
                 autoPlay
                 playsInline
                 muted
-                className="absolute inset-0 h-full w-full object-cover"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                }}
               />
-
-              {/* dark overlay */}
-              <div className="absolute inset-0 bg-black/45" />
-
-              {/* centered scan window */}
-              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-                <div className="relative h-55 w-55 sm:h-62.5 sm:w-62.5">
-                  {/* outer dim using huge shadow */}
+              {/* Dark overlay with cutout */}
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background: "rgba(0,0,0,0.55)",
+                  WebkitMaskImage:
+                    "radial-gradient(ellipse 200px 200px at 50% 46%,transparent 99%,black 100%)",
+                  maskImage:
+                    "radial-gradient(ellipse 200px 200px at 50% 46%,transparent 99%,black 100%)",
+                }}
+              />
+              {/* Scan box corners */}
+              <div
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  left: "50%",
+                  transform: "translate(-50%,-54%)",
+                  width: 220,
+                  height: 220,
+                }}
+              >
+                {[
+                  {
+                    top: 0,
+                    left: 0,
+                    borderTop: "3px solid #818cf8",
+                    borderLeft: "3px solid #818cf8",
+                    borderRadius: "6px 0 0 0",
+                  },
+                  {
+                    top: 0,
+                    right: 0,
+                    borderTop: "3px solid #818cf8",
+                    borderRight: "3px solid #818cf8",
+                    borderRadius: "0 6px 0 0",
+                  },
+                  {
+                    bottom: 0,
+                    left: 0,
+                    borderBottom: "3px solid #818cf8",
+                    borderLeft: "3px solid #818cf8",
+                    borderRadius: "0 0 0 6px",
+                  },
+                  {
+                    bottom: 0,
+                    right: 0,
+                    borderBottom: "3px solid #818cf8",
+                    borderRight: "3px solid #818cf8",
+                    borderRadius: "0 0 6px 0",
+                  },
+                ].map((s, i) => (
                   <div
-                    className="absolute inset-0 rounded-2xl border border-white/20"
+                    key={i}
                     style={{
-                      boxShadow: "0 0 0 9999px rgba(0,0,0,0.42)",
+                      position: "absolute",
+                      width: 28,
+                      height: 28,
+                      ...s,
                     }}
                   />
-
-                  {/* corner brackets */}
-                  <div className="absolute left-0 top-0 h-10 w-10 rounded-tl-xl border-l-4 border-t-4 border-blue-400" />
-                  <div className="absolute right-0 top-0 h-10 w-10 rounded-tr-xl border-r-4 border-t-4 border-blue-400" />
-                  <div className="absolute bottom-0 left-0 h-10 w-10 rounded-bl-xl border-b-4 border-l-4 border-blue-400" />
-                  <div className="absolute bottom-0 right-0 h-10 w-10 rounded-br-xl border-b-4 border-r-4 border-blue-400" />
-
-                  {/* scan line */}
-                  <div className="absolute left-3 right-3 top-1/2 h-0.5 -translate-y-1/2 bg-linear-to-r from-transparent via-cyan-400 to-transparent animate-[scanline_2s_ease-in-out_infinite]" />
-                </div>
+                ))}
+                <div
+                  style={{
+                    position: "absolute",
+                    left: 8,
+                    right: 8,
+                    height: 2,
+                    background:
+                      "linear-gradient(90deg,transparent,#818cf8,transparent)",
+                    animation: "scanline 1.8s ease-in-out infinite",
+                    top: "50%",
+                  }}
+                />
               </div>
-
-              {/* text */}
-              <div className="absolute bottom-16 left-1/2 z-20 -translate-x-1/2">
-                <span className="rounded-full bg-black/65 px-4 py-2 text-center text-sm text-white backdrop-blur-sm">
-                  Align QR inside the box
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: 52,
+                  left: 0,
+                  right: 0,
+                  textAlign: "center",
+                }}
+              >
+                <span
+                  style={{
+                    background: "rgba(0,0,0,0.55)",
+                    color: "#c7d2fe",
+                    fontSize: 12,
+                    padding: "4px 14px",
+                    borderRadius: 20,
+                  }}
+                >
+                  Point at QR — auto-marks on detect
                 </span>
               </div>
-
-              {/* stop button */}
               <button
                 onClick={stopCamera}
-                className="absolute right-3 top-3 z-20 flex items-center gap-1 rounded-2xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-red-700"
+                style={{
+                  position: "absolute",
+                  top: 12,
+                  right: 12,
+                  background: "rgba(239,68,68,0.85)",
+                  color: "white",
+                  border: "none",
+                  borderRadius: 10,
+                  padding: "6px 12px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
               >
-                <MdClose size={16} />
+                <MdClose size={14} />
                 Stop
               </button>
             </div>
           )}
         </div>
 
-        <style>{`
-          @keyframes scanline {
-            0% {
-              top: 12%;
-              opacity: 0;
-            }
-            10% {
-              opacity: 1;
-            }
-            90% {
-              opacity: 1;
-            }
-            100% {
-              top: 88%;
-              opacity: 0;
-            }
-          }
-        `}</style>
-
         <canvas ref={canvasRef} style={{ display: "none" }} />
 
-        <div className="mb-5 flex items-center gap-3">
-          <div className="h-px flex-1 bg-gray-300" />
-          <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-            Or enter token manually
+        {/* Divider */}
+        <div className="flex items-center gap-3 mb-5">
+          <div className="flex-1 h-px bg-slate-200" />
+          <span className="text-xs text-slate-400 font-semibold uppercase tracking-widest">
+            or enter manually
           </span>
-          <div className="h-px flex-1 bg-gray-300" />
+          <div className="flex-1 h-px bg-slate-200" />
         </div>
 
-        <div className="mb-5 rounded-2xl bg-white p-6 shadow-lg">
-          <form onSubmit={handleManualSubmit} className="space-y-3">
+        {/* Manual entry */}
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5 mb-5">
+          <form onSubmit={handleManual} className="space-y-3">
             <textarea
               value={qrInput}
               onChange={(e) => setQrInput(e.target.value)}
               placeholder="Paste the QR token from your teacher…"
               rows={3}
-              className="w-full resize-none rounded-xl border border-gray-300 px-4 py-3 font-mono text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-50 outline-none text-sm font-mono resize-none placeholder:text-slate-400"
             />
             <button
               type="submit"
               disabled={loading || !qrInput.trim()}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3 font-semibold text-white transition hover:bg-green-700 disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl transition disabled:opacity-50 text-sm active:scale-[0.98]"
             >
-              <MdCheckCircle size={18} />
+              <MdCheckCircle size={17} />
               {loading ? "Processing…" : "Mark Attendance"}
             </button>
           </form>
         </div>
 
-        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
-          <h3 className="mb-2 flex items-center gap-1 text-sm font-semibold text-blue-900">
-            <MdInfo size={16} />
-            How It Works
-          </h3>
-          <ol className="list-inside list-decimal space-y-1 text-sm text-blue-800">
-            <li>Teacher generates a QR code in class</li>
+        {/* Help */}
+        <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl mb-3">
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-blue-800 mb-2">
+            <MdInfo size={14} />
+            How it works
+          </p>
+          <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
+            <li>Teacher generates a QR in class</li>
             <li>
-              Tap <strong>Open Camera</strong>
+              Tap <strong>Open Camera</strong> and point at the QR
             </li>
-            <li>Keep the QR inside the scan box</li>
-            <li>Attendance is marked automatically</li>
+            <li>
+              Attendance is marked <strong>instantly</strong> — no button needed
+            </li>
+            <li>Or paste the token manually if camera isn't available</li>
           </ol>
         </div>
-
-        <div className="flex items-start gap-2 rounded-xl border border-yellow-200 bg-yellow-50 p-4">
-          <MdWarning className="mt-0.5 shrink-0 text-yellow-600" size={18} />
-          <p className="text-sm text-yellow-800">
-            <strong>Note:</strong> QR tokens expire when the session ends. Mark
+        <div className="flex items-start gap-2 p-3.5 bg-amber-50 border border-amber-100 rounded-2xl">
+          <MdWarning size={15} className="text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-800">
+            <strong>Note:</strong> QR codes expire when the session ends. Mark
             attendance promptly.
           </p>
         </div>
       </div>
     </div>
   );
-};
-
-export default MarkAttendance;
+}

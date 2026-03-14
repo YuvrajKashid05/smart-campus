@@ -1,478 +1,172 @@
 import { useContext, useState } from "react";
-import {
-  MdDownload,
-  MdError,
-  MdPerson,
-  MdRefresh,
-  MdSearch,
-  MdWarning,
-} from "react-icons/md";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { MdWarning, MdSearch, MdDownload, MdRefresh } from "react-icons/md";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, ResponsiveContainer } from "recharts";
 import { AuthContext } from "../../context/AuthContext";
 import * as attendanceService from "../../services/attendance";
+import { PAGE, INPUT, SELECT, BTN_PRIMARY, Alert, SectionCard, Empty } from "../../ui";
 
-const now = new Date();
+const LABEL = "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide";
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
-const DefaulterList = () => {
+function pctColor(p) { return p >= 75 ? "#10b981" : p >= 60 ? "#f59e0b" : "#ef4444"; }
+
+export default function DefaulterList() {
   const { user } = useContext(AuthContext);
-  const [filters, setFilters] = useState({
-    dept: user?.dept || "",
-    section: "",
-    semester: "",
-    threshold: "75",
-    month: String(now.getMonth() + 1),
-    year: String(now.getFullYear()),
-  });
+  const now = new Date();
+  const [filters, setFilters] = useState({ dept:user?.dept||"", section:"", semester:"", threshold:"75", month:String(now.getMonth()+1), year:String(now.getFullYear()) });
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFilters((p) => ({ ...p, [name]: value }));
-  };
+  const set = (k,v) => setFilters(p=>({...p,[k]:v}));
 
-  const fetchDefaulters = async (e) => {
+  const fetch = async (e) => {
     e?.preventDefault();
-    setLoading(true);
-    setError("");
-    setResult(null);
+    if (!filters.dept) { setError("Department is required."); return; }
+    setLoading(true); setError(""); setResult(null);
     try {
-      const params = {
-        dept: filters.dept,
-        threshold: filters.threshold,
-        month: filters.month,
-        year: filters.year,
-      };
+      const params = { dept:filters.dept, threshold:filters.threshold, month:filters.month, year:filters.year };
       if (filters.section) params.section = filters.section;
       if (filters.semester) params.semester = filters.semester;
-
       const res = await attendanceService.getDefaulters(params);
       if (res.ok) setResult(res);
-      else setError(res.error || "Failed to fetch defaulters.");
-    } catch (err) {
-      setError(err.response?.data?.error || "Failed to fetch defaulter list.");
-    } finally {
-      setLoading(false);
-    }
+      else setError(res.error||"Failed to fetch.");
+    } catch(err) { setError(err.response?.data?.error||"Failed."); }
+    finally { setLoading(false); }
   };
 
-  const months = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-  ];
+  const defaulters = result?.defaulters || [];
+  const filtered = defaulters.filter(d => !search || d.student?.name?.toLowerCase().includes(search.toLowerCase()) || d.student?.rollNo?.toLowerCase().includes(search.toLowerCase()));
 
-  const years = Array.from({ length: 3 }, (_, i) =>
-    String(now.getFullYear() - i),
-  );
-
-  const filtered = (result?.defaulters || []).filter(
-    (d) =>
-      !search ||
-      d.student.name?.toLowerCase().includes(search.toLowerCase()) ||
-      d.student.rollNo?.toLowerCase().includes(search.toLowerCase()),
-  );
-
-  // Chart data
-  const chartData = filtered.slice(0, 15).map((d) => ({
-    name: d.student.rollNo || d.student.name.split(" ")[0],
-    fullName: d.student.name,
-    percentage: d.percentage,
-  }));
-
-  const handleExportCSV = () => {
-    if (!filtered.length) return;
-    const header = [
-      "Name",
-      "Roll No",
-      "Email",
-      "Dept",
-      "Section",
-      "Semester",
-      "Attended",
-      "Total",
-      "Percentage",
-      "Shortfall",
-    ];
-    const rows = filtered.map((d) => [
-      d.student.name,
-      d.student.rollNo,
-      d.student.email,
-      d.student.dept,
-      d.student.section,
-      d.student.semester,
-      d.attended,
-      d.totalSessions,
-      `${d.percentage}%`,
-      `${d.shortfall}%`,
-    ]);
-    const csv = [header, ...rows].map((r) => r.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `defaulters_${filters.dept}_${months[parseInt(filters.month) - 1]}_${filters.year}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const exportCSV = () => {
+    const rows = [["Name","Roll No","Dept","Semester","Section","Attended","Total","Percentage"]];
+    filtered.forEach(d => rows.push([d.student?.name||"",d.student?.rollNo||"",d.student?.dept||"",d.student?.semester||"",d.student?.section||"",d.attended,d.total,d.percentage+"%"]));
+    const csv = rows.map(r=>r.join(",")).join("\n");
+    const a = document.createElement("a"); a.href = "data:text/csv;charset=utf-8,"+encodeURIComponent(csv); a.download = `defaulters_${filters.dept}_${MONTHS[parseInt(filters.month)-1]}_${filters.year}.csv`; a.click();
   };
+
+  const barData = filtered.slice(0,15).map(d => ({ name:d.student?.name?.split(" ")[0]||"?", pct:d.percentage, rollNo:d.student?.rollNo||"" }));
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-            <MdWarning className="text-orange-500" /> Defaulter List
-          </h1>
-          <p className="text-gray-500 mt-1 text-sm">
-            Students below the attendance threshold for a given month
-          </p>
-        </div>
+    <div className={PAGE+" fade-up"}>
+      <div className="max-w-5xl mx-auto">
+        <div className="mb-6"><h1 className="text-2xl font-bold text-slate-900">Defaulter List</h1><p className="text-slate-500 text-sm mt-0.5">Students below the attendance threshold</p></div>
+        {error && <div className="mb-4"><Alert type="error">{error}</Alert></div>}
 
         {/* Filter form */}
-        <div className="bg-white rounded-xl shadow p-6 mb-6">
-          <form
-            onSubmit={fetchDefaulters}
-            className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4"
-          >
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">
-                Department *
-              </label>
-              <input
-                type="text"
-                name="dept"
-                value={filters.dept}
-                onChange={handleChange}
-                placeholder="e.g. CS"
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-              />
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 mb-5">
+          <form onSubmit={fetch} className="grid sm:grid-cols-3 lg:grid-cols-6 gap-3 items-end">
+            <div className="lg:col-span-1"><label className={LABEL}>Dept *</label><input value={filters.dept} onChange={e=>set("dept",e.target.value.toUpperCase())} placeholder="CS" className={INPUT} required/></div>
+            <div><label className={LABEL}>Section</label><input value={filters.section} onChange={e=>set("section",e.target.value.toUpperCase())} placeholder="A" className={INPUT}/></div>
+            <div><label className={LABEL}>Semester</label>
+              <select value={filters.semester} onChange={e=>set("semester",e.target.value)} className={SELECT}><option value="">All</option>{[1,2,3,4,5,6,7,8].map(s=><option key={s} value={s}>{s}</option>)}</select>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">
-                Section
-              </label>
-              <input
-                type="text"
-                name="section"
-                value={filters.section}
-                onChange={handleChange}
-                placeholder="e.g. A (or leave blank)"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-              />
+            <div><label className={LABEL}>Threshold %</label><input type="number" value={filters.threshold} onChange={e=>set("threshold",e.target.value)} min="0" max="100" className={INPUT}/></div>
+            <div><label className={LABEL}>Month</label>
+              <select value={filters.month} onChange={e=>set("month",e.target.value)} className={SELECT}>{MONTHS.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">
-                Semester
-              </label>
-              <select
-                name="semester"
-                value={filters.semester}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-              >
-                <option value="">All Semesters</option>
-                {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
-                  <option key={s} value={s}>
-                    Sem {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">
-                Threshold %
-              </label>
-              <select
-                name="threshold"
-                value={filters.threshold}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-              >
-                {["60", "65", "70", "75", "80", "85"].map((t) => (
-                  <option key={t} value={t}>
-                    Below {t}%
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">
-                Month
-              </label>
-              <select
-                name="month"
-                value={filters.month}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-              >
-                {months.map((m, i) => (
-                  <option key={m} value={String(i + 1)}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">
-                Year
-              </label>
-              <select
-                name="year"
-                value={filters.year}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-              >
-                {years.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-end">
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full flex items-center justify-center gap-2 bg-orange-500 text-white py-2 rounded-lg hover:bg-orange-600 disabled:opacity-50 transition font-semibold"
-              >
-                <MdRefresh
-                  size={18}
-                  className={loading ? "animate-spin" : ""}
-                />
-                {loading ? "Loading…" : "Generate List"}
+            <div><label className={LABEL}>Year</label><input type="number" value={filters.year} onChange={e=>set("year",e.target.value)} min="2020" className={INPUT}/></div>
+            <div className="sm:col-span-3 lg:col-span-6">
+              <button type="submit" disabled={loading} className={BTN_PRIMARY}>
+                {loading?<><div className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin"/>Fetching…</>:<><MdRefresh size={15}/>Fetch Defaulters</>}
               </button>
             </div>
           </form>
         </div>
 
-        {error && (
-          <div className="mb-4 flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-4">
-            <MdError className="text-red-500 shrink-0 mt-0.5" size={20} />
-            <p className="text-red-800 text-sm">{error}</p>
-          </div>
-        )}
-
         {result && (
           <>
-            {/* Summary banner */}
-            <div
-              className={`rounded-xl p-5 mb-6 ${filtered.length > 0 ? "bg-red-50 border border-red-200" : "bg-green-50 border border-green-200"}`}
-            >
-              <div className="flex flex-wrap gap-6 items-center">
-                <div>
-                  <p className="text-3xl font-bold text-gray-900">
-                    {filtered.length}
-                  </p>
-                  <p className="text-sm text-gray-600">Defaulters</p>
+            {/* Summary */}
+            <div className="grid grid-cols-3 gap-3 mb-5">
+              {[
+                { l:"Total Defaulters", v:defaulters.length, c:"text-red-600 bg-red-50" },
+                { l:"Threshold",        v:filters.threshold+"%", c:"text-amber-600 bg-amber-50" },
+                { l:"Period",           v:`${MONTHS[parseInt(filters.month)-1].slice(0,3)} ${filters.year}`, c:"text-blue-600 bg-blue-50" },
+              ].map(c=>(
+                <div key={c.l} className={`rounded-2xl p-4 ${c.c.split(" ")[1]}`}>
+                  <p className="text-xs font-semibold text-slate-500">{c.l}</p>
+                  <p className={`text-2xl font-bold mt-0.5 ${c.c.split(" ")[0]}`}>{c.v}</p>
                 </div>
-                <div>
-                  <p className="text-3xl font-bold text-gray-900">
-                    {result.totalSessions}
-                  </p>
-                  <p className="text-sm text-gray-600">Sessions this month</p>
-                </div>
-                <div>
-                  <p className="text-3xl font-bold text-gray-900">
-                    {result.threshold}%
-                  </p>
-                  <p className="text-sm text-gray-600">Threshold</p>
-                </div>
-                <div className="ml-auto flex gap-2">
-                  {filtered.length > 0 && (
-                    <button
-                      onClick={handleExportCSV}
-                      className="flex items-center gap-2 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 text-sm font-medium"
-                    >
-                      <MdDownload size={16} /> Export CSV
-                    </button>
-                  )}
-                </div>
-              </div>
+              ))}
             </div>
 
-            {/* Bar chart */}
-            {chartData.length > 0 && (
-              <div className="bg-white rounded-xl shadow p-6 mb-6">
-                <h2 className="text-lg font-bold text-gray-900 mb-4">
-                  Attendance % — Defaulters
-                </h2>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart
-                    data={chartData}
-                    margin={{ top: 5, right: 10, left: -20, bottom: 40 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis
-                      dataKey="name"
-                      tick={{ fontSize: 11 }}
-                      angle={-35}
-                      textAnchor="end"
-                    />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
-                    <Tooltip
-                      formatter={(v, _, p) => [`${v}%`, p.payload.fullName]}
-                    />
-                    {/* Threshold reference */}
-                    <Bar dataKey="percentage" radius={[4, 4, 0, 0]}>
-                      {chartData.map((entry, i) => (
-                        <Cell
-                          key={i}
-                          fill={entry.percentage < 60 ? "#ef4444" : "#f59e0b"}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-
-            {/* Search */}
-            {filtered.length > 0 && (
-              <div className="mb-4 flex items-center gap-2 bg-white rounded-xl shadow px-4 py-3">
-                <MdSearch size={20} className="text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search by name or roll number…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="flex-1 outline-none text-sm"
-                />
-              </div>
-            )}
-
-            {/* Table */}
-            {filtered.length === 0 ? (
-              <div className="bg-white rounded-xl shadow p-12 text-center">
-                <p className="text-2xl">🎉</p>
-                <p className="text-gray-500 font-semibold mt-2">
-                  No defaulters found!
-                </p>
-                <p className="text-gray-400 text-sm mt-1">
-                  All students are above the {result.threshold}% threshold.
-                </p>
-              </div>
-            ) : (
-              <div className="bg-white rounded-xl shadow overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-orange-50 border-b border-orange-200">
-                      <tr>
-                        {[
-                          "#",
-                          "Name",
-                          "Roll No",
-                          "Dept",
-                          "Section",
-                          "Sem",
-                          "Attended",
-                          "Total",
-                          "Attendance %",
-                          "Shortfall",
-                        ].map((h) => (
-                          <th
-                            key={h}
-                            className="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap"
-                          >
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtered.map((d, i) => (
-                        <tr
-                          key={d.student._id}
-                          className="border-b hover:bg-gray-50"
-                        >
-                          <td className="px-4 py-3 text-gray-400">{i + 1}</td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center shrink-0">
-                                <MdPerson className="text-red-400" size={16} />
-                              </div>
-                              <div>
-                                <p className="font-semibold text-gray-900">
-                                  {d.student.name}
-                                </p>
-                                <p className="text-xs text-gray-400">
-                                  {d.student.email}
-                                </p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 font-mono text-blue-700">
-                            {d.student.rollNo || "—"}
-                          </td>
-                          <td className="px-4 py-3">{d.student.dept || "—"}</td>
-                          <td className="px-4 py-3">
-                            {d.student.section || "—"}
-                          </td>
-                          <td className="px-4 py-3">
-                            {d.student.semester || "—"}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            {d.attended}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            {d.totalSessions}
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden w-16">
-                                <div
-                                  className="h-full rounded-full"
-                                  style={{
-                                    width: `${d.percentage}%`,
-                                    backgroundColor:
-                                      d.percentage < 60 ? "#ef4444" : "#f59e0b",
-                                  }}
-                                />
-                              </div>
-                              <span
-                                className={`font-bold text-sm ${d.percentage < 60 ? "text-red-600" : "text-yellow-600"}`}
-                              >
-                                {d.percentage}%
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-bold">
-                              -{d.shortfall}%
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            {defaulters.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+                <div className="py-16 text-center">
+                  <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <MdWarning size={28} className="text-emerald-500"/>
+                  </div>
+                  <p className="font-semibold text-slate-700">No defaulters! 🎉</p>
+                  <p className="text-slate-400 text-sm mt-1">All students are above {filters.threshold}%</p>
                 </div>
               </div>
+            ) : (
+              <>
+                {/* Bar chart */}
+                {barData.length > 0 && (
+                  <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 mb-5">
+                    <p className="font-semibold text-slate-900 text-sm mb-4">Attendance % (top {barData.length})</p>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={barData} margin={{ bottom:30, left:-15 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
+                        <XAxis dataKey="name" tick={{ fontSize:11 }} angle={-30} textAnchor="end"/>
+                        <YAxis domain={[0,100]} tick={{ fontSize:11 }} unit="%"/>
+                        <Tooltip formatter={(v,_,p)=>[`${v}% (${p.payload.rollNo})`,"Attendance"]}/>
+                        <Bar dataKey="pct" radius={[4,4,0,0]}>{barData.map((d,i)=><Cell key={i} fill={pctColor(d.pct)}/>)}</Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                    <div className="mt-1 flex items-center gap-1 justify-center">
+                      <div className="w-16 h-0.5 bg-red-300"/>
+                      <span className="text-xs text-slate-400">{filters.threshold}% threshold</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Table */}
+                <SectionCard
+                  title={`Defaulters (${filtered.length})`}
+                  action={
+                    <div className="flex items-center gap-2">
+                      <div className="relative"><MdSearch size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…" className="pl-7 pr-3 py-1.5 rounded-lg border border-slate-200 text-xs focus:border-indigo-500 outline-none bg-white w-36"/></div>
+                      <button onClick={exportCSV} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"><MdDownload size={13}/>CSV</button>
+                    </div>
+                  }
+                >
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead><tr className="border-b border-slate-100">{["Student","Roll No","Sem · Sec","Attended","Total","Attendance","Shortfall"].map(h=><th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>)}</tr></thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {filtered.map((d,i)=>(
+                          <tr key={i} className="hover:bg-slate-50 transition">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="w-7 h-7 rounded-full bg-red-100 flex items-center justify-center text-xs font-bold text-red-600 shrink-0">{d.student?.name?.charAt(0)?.toUpperCase()||"?"}</div>
+                                <p className="font-semibold text-slate-900 text-sm">{d.student?.name||"—"}</p>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-xs font-mono text-slate-600">{d.student?.rollNo||"—"}</td>
+                            <td className="px-4 py-3 text-xs text-slate-500">{d.student?.semester?`Sem ${d.student.semester}`:""}{d.student?.section?` · ${d.student.section}`:""}</td>
+                            <td className="px-4 py-3 text-sm font-semibold text-slate-700">{d.attended}</td>
+                            <td className="px-4 py-3 text-sm text-slate-500">{d.total}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width:`${d.percentage}%`, backgroundColor:pctColor(d.percentage) }}/></div>
+                                <span className="text-xs font-bold" style={{ color:pctColor(d.percentage) }}>{d.percentage}%</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3"><span className="text-xs font-bold bg-red-50 text-red-600 px-2 py-0.5 rounded-full">-{d.shortfall||Math.round(filters.threshold-d.percentage)}%</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </SectionCard>
+              </>
             )}
           </>
         )}
       </div>
     </div>
   );
-};
-
-export default DefaulterList;
+}

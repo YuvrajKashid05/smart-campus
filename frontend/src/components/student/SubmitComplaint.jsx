@@ -1,165 +1,101 @@
-import { useContext, useState } from "react";
-import {
-  MdCheckCircle,
-  MdError,
-  MdInfo,
-  MdMessage,
-  MdSend,
-  MdWarning,
-} from "react-icons/md";
-import { AuthContext } from "../../context/AuthContext";
+import { useState } from "react";
+import { MdMessage, MdSend, MdCheckCircle, MdInfo } from "react-icons/md";
 import * as complaintsService from "../../services/complaints";
+import { PAGE, Alert } from "../../ui";
 
-// Backend enum: "IT" | "FACILITY" | "ACADEMIC" | "OTHER"
-const CATEGORIES = [
-  { label: "Academic", value: "ACADEMIC" },
-  { label: "IT / Technical", value: "IT" },
-  { label: "Facility", value: "FACILITY" },
-  { label: "Other", value: "OTHER" },
+const CATS = [
+  { v:"ACADEMIC", l:"Academic",      emoji:"📚", desc:"Exams, grades, curriculum" },
+  { v:"IT",       l:"IT / Technical",emoji:"💻", desc:"Software, network, hardware" },
+  { v:"FACILITY", l:"Facility",      emoji:"🏛️", desc:"Classrooms, labs, infra" },
+  { v:"OTHER",    l:"Other",         emoji:"📋", desc:"Anything else" },
 ];
 
-const SubmitComplaint = () => {
-  const { user } = useContext(AuthContext);
-  const [formData, setFormData] = useState({
-    category: "ACADEMIC",
-    message: "",
-  });
+export default function SubmitComplaint() {
+  const [form, setForm] = useState({ category:"ACADEMIC", message:"" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
+  const [submitted, setSubmitted] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError("");
-    setSuccess("");
-
+    if (form.message.trim().length < 10) { setError("Please describe your complaint in at least 10 characters."); return; }
+    setLoading(true); setError("");
     try {
-      const result = await complaintsService.submitComplaint({
-        category: formData.category,
-        message: formData.message,
-      });
-
-      if (result.ok) {
-        setSuccess(
-          "Complaint submitted successfully! Complaint ID: " +
-            result.complaint._id,
-        );
-        setFormData({ category: "ACADEMIC", message: "" });
-      } else {
-        setError(result.error || "Failed to submit complaint");
-      }
-    } catch (err) {
-      setError(err.response?.data?.error || "Failed to submit complaint");
-    } finally {
-      setLoading(false);
-    }
+      const res = await complaintsService.submitComplaint(form);
+      if (res.ok) { setSubmitted(res.complaint); setForm({ category:"ACADEMIC", message:"" }); }
+      else setError(res.error || "Failed to submit");
+    } catch(err) { setError(err.response?.data?.error || "Failed to submit complaint"); }
+    finally { setLoading(false); }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center gap-2">
-          <MdMessage className="text-blue-500" /> Submit a Complaint
-        </h1>
-        <p className="text-gray-600 mb-8">
-          Please let us know if you have any concerns.
-        </p>
-
-        {success && (
-          <div className="mb-6 flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg p-4">
-            <MdCheckCircle className="text-green-500 shrink-0" size={20} />
-            <p className="text-sm text-green-800">{success}</p>
-          </div>
-        )}
-
-        {error && (
-          <div className="mb-6 flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg p-4">
-            <MdError className="text-red-500 shrink-0" size={20} />
-            <p className="text-sm text-red-800">{error}</p>
-          </div>
-        )}
-
-        <form
-          onSubmit={handleSubmit}
-          className="bg-white rounded-lg shadow-md p-8 space-y-6"
-        >
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Category *
-            </label>
-            <select
-              name="category"
-              value={formData.category}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-            >
-              {CATEGORIES.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Detailed Description * ({formData.message.length}/1000)
-            </label>
-            <textarea
-              name="message"
-              value={formData.message}
-              onChange={handleInputChange}
-              placeholder="Please provide detailed information about your complaint..."
-              required
-              rows="6"
-              maxLength="1000"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-2 bg-linear-to-r from-blue-600 to-blue-800 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-blue-900 disabled:opacity-50 transition"
-          >
-            <MdSend size={18} />
-            {loading ? "Submitting..." : "Submit Complaint"}
-          </button>
-        </form>
-
-        <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-          <h3 className="font-semibold text-yellow-900 mb-3 flex items-center gap-2">
-            <MdWarning size={18} /> Important Information
-          </h3>
-          <ul className="text-sm text-yellow-800 space-y-2 list-disc list-inside">
-            <li>
-              All complaints are confidential and reviewed by administration
-            </li>
-            <li>We aim to resolve complaints within 7 working days</li>
-            <li>
-              Please provide as much detail as possible for faster resolution
-            </li>
-          </ul>
+    <div className={PAGE + " fade-up"}>
+      <div className="max-w-xl mx-auto">
+        <div className="mb-7">
+          <h1 className="text-2xl font-bold text-slate-900">Submit a Complaint</h1>
+          <p className="text-slate-500 text-sm mt-0.5">All complaints are reviewed confidentially by administration.</p>
         </div>
 
-        <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-6">
-          <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
-            <MdInfo size={18} /> Need Help?
-          </h3>
-          <p className="text-sm text-blue-800">
-            If your issue is urgent, please contact the administration office
-            directly.
-          </p>
+        {submitted && (
+          <div className="mb-5 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start gap-3">
+            <MdCheckCircle size={22} className="text-emerald-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-emerald-800 text-sm">Complaint submitted successfully!</p>
+              <p className="text-emerald-700 text-xs mt-0.5">Reference ID: {submitted._id}</p>
+              <button onClick={() => setSubmitted(null)} className="text-xs text-emerald-700 underline mt-1">Submit another</button>
+            </div>
+          </div>
+        )}
+
+        {error && <div className="mb-5"><Alert type="error">{error}</Alert></div>}
+
+        {!submitted && (
+          <form onSubmit={handleSubmit} className="bg-white rounded-3xl border border-slate-100 shadow-sm p-7 space-y-5">
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-2.5 uppercase tracking-wide">Category</label>
+              <div className="grid grid-cols-2 gap-2">
+                {CATS.map(c => (
+                  <button key={c.v} type="button" onClick={() => setForm(p => ({ ...p, category: c.v }))}
+                    className={`flex items-start gap-2.5 p-3 rounded-xl border-2 text-left transition ${form.category === c.v ? "border-indigo-500 bg-indigo-50" : "border-slate-100 hover:border-slate-200"}`}>
+                    <span className="text-base mt-0.5">{c.emoji}</span>
+                    <div>
+                      <p className={`text-sm font-semibold ${form.category === c.v ? "text-indigo-700" : "text-slate-700"}`}>{c.l}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{c.desc}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                Description <span className="normal-case font-normal text-slate-400">({form.message.length}/1000)</span>
+              </label>
+              <textarea value={form.message} onChange={e => setForm(p => ({ ...p, message: e.target.value }))}
+                placeholder="Describe your complaint in detail — include dates, locations and people involved…"
+                rows={6} maxLength={1000} required
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-50 outline-none text-sm text-slate-800 bg-white transition resize-none placeholder:text-slate-400" />
+            </div>
+
+            <button type="submit" disabled={loading}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition text-sm disabled:opacity-50">
+              {loading ? <div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" /> : <><MdSend size={15} />Submit Complaint</>}
+            </button>
+          </form>
+        )}
+
+        <div className="mt-5 p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-3">
+          <MdInfo size={17} className="text-blue-500 shrink-0 mt-0.5" />
+          <div className="text-sm text-blue-800">
+            <p className="font-semibold mb-1">What happens next?</p>
+            <ul className="space-y-1 text-xs text-blue-700 list-disc list-inside">
+              <li>Your complaint is reviewed by administration</li>
+              <li>We aim to respond within 7 working days</li>
+              <li>For urgent matters, contact the office directly</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>
   );
-};
-
-export default SubmitComplaint;
+}

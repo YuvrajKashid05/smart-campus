@@ -1,228 +1,105 @@
 import { useEffect, useState } from "react";
-import {
-  MdCalendarMonth,
-  MdCheckCircle,
-  MdMessage,
-  MdPerson,
-  MdRefresh,
-} from "react-icons/md";
+import { MdMessage, MdSearch, MdRefresh, MdPerson } from "react-icons/md";
 import * as complaintsService from "../../services/complaints";
+import { PAGE, SELECT, Loading, SectionCard, Alert, Empty } from "../../ui";
 
-const STATUS_STYLES = {
-  OPEN: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  IN_PROGRESS: "bg-blue-100 text-blue-800 border-blue-300",
-  CLOSED: "bg-green-100 text-green-800 border-green-300",
+const STATUS = {
+  OPEN:       { cls:"bg-amber-50 text-amber-700 border-amber-200", label:"Open" },
+  IN_PROGRESS:{ cls:"bg-blue-50 text-blue-700 border-blue-200",   label:"In Progress" },
+  RESOLVED:   { cls:"bg-emerald-50 text-emerald-700 border-emerald-200", label:"Resolved" },
 };
+const CAT_COLOR = { ACADEMIC:"bg-blue-50 text-blue-700", IT:"bg-violet-50 text-violet-700", FACILITY:"bg-teal-50 text-teal-700", OTHER:"bg-slate-100 text-slate-600" };
 
-const BORDER_COLORS = {
-  OPEN: "border-yellow-400",
-  IN_PROGRESS: "border-blue-400",
-  CLOSED: "border-green-400",
-};
-
-const ViewComplaints = () => {
+export default function ViewComplaints() {
   const [complaints, setComplaints] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [filterCategory, setFilterCategory] = useState("ALL");
+  const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("ALL");
+  const [filterCat, setFilterCat] = useState("ALL");
+  const [error, setError] = useState(""); const [success, setSuccess] = useState("");
   const [updatingId, setUpdatingId] = useState(null);
 
-  useEffect(() => {
-    fetchComplaints();
-  }, []);
+  const load = () => { setLoading(true); complaintsService.getComplaints().then(d=>setComplaints(d?.data||[])).catch(()=>{}).finally(()=>setLoading(false)); };
+  useEffect(load,[]);
+  const flash=(m,t="success")=>{ if(t==="success"){setSuccess(m);setTimeout(()=>setSuccess(""),3000);}else{setError(m);setTimeout(()=>setError(""),4000);} };
 
-  const fetchComplaints = async () => {
-    setLoading(true);
-    try {
-      const data = await complaintsService.getComplaints();
-      setComplaints(data?.complaints || []);
-    } catch {
-      setError("Failed to fetch complaints");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleStatusChange = async (id, newStatus) => {
+  const handleStatus = async (id, status) => {
     setUpdatingId(id);
-    try {
-      await complaintsService.updateComplaintStatus(id, newStatus);
-      setComplaints((prev) =>
-        prev.map((c) => (c._id === id ? { ...c, status: newStatus } : c)),
-      );
-      setSuccess(`Status updated to ${newStatus}`);
-      setTimeout(() => setSuccess(""), 3000);
-    } catch {
-      setError("Failed to update status");
-      setTimeout(() => setError(""), 3000);
-    } finally {
-      setUpdatingId(null);
-    }
+    try { await complaintsService.updateComplaintStatus(id, status); flash("Status updated!"); setComplaints(p=>p.map(c=>c._id===id?{...c,status}:c)); }
+    catch { flash("Failed to update.","error"); } finally { setUpdatingId(null); }
   };
 
-  const filtered = complaints.filter((c) => {
-    const matchCat = filterCategory === "ALL" || c.category === filterCategory;
-    const matchStatus = filterStatus === "ALL" || c.status === filterStatus;
-    return matchCat && matchStatus;
+  const filtered = complaints.filter(c => {
+    if (filterStatus!=="ALL" && c.status!==filterStatus) return false;
+    if (filterCat!=="ALL" && c.category!==filterCat) return false;
+    if (search && !c.message.toLowerCase().includes(search.toLowerCase()) && !c.createdBy?.name?.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
   });
 
-  if (loading)
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
-      </div>
-    );
+  const counts = { OPEN:complaints.filter(c=>c.status==="OPEN").length, IN_PROGRESS:complaints.filter(c=>c.status==="IN_PROGRESS").length, RESOLVED:complaints.filter(c=>c.status==="RESOLVED").length };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-2">
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-            <MdMessage className="text-red-500" /> View Complaints
-          </h1>
-          <button
-            onClick={fetchComplaints}
-            className="flex items-center gap-1 px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
-          >
-            <MdRefresh size={18} /> Refresh
-          </button>
-        </div>
-        <p className="text-gray-600 mb-6">
-          Review and manage student complaints
-        </p>
+    <div className={PAGE+" fade-up"}>
+      <div className="max-w-5xl mx-auto">
+        <div className="mb-6"><h1 className="text-2xl font-bold text-slate-900">Complaints</h1><p className="text-slate-500 text-sm mt-0.5">{complaints.length} total complaints</p></div>
+        {error&&<div className="mb-4"><Alert type="error">{error}</Alert></div>}
+        {success&&<div className="mb-4"><Alert type="success">{success}</Alert></div>}
 
-        {error && (
-          <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-800">
-            {error}
-          </div>
-        )}
-        {success && (
-          <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-800">
-            {success}
-          </div>
-        )}
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-3 mb-5">
+          {[{ l:"Open", v:counts.OPEN, c:"text-amber-600 bg-amber-50" },{ l:"In Progress", v:counts.IN_PROGRESS, c:"text-blue-600 bg-blue-50" },{ l:"Resolved", v:counts.RESOLVED, c:"text-emerald-600 bg-emerald-50" }].map(c=>(
+            <div key={c.l} className={`rounded-2xl p-4 ${c.c.split(" ")[1]}`}>
+              <p className="text-xs font-semibold text-slate-500">{c.l}</p>
+              <p className={`text-2xl font-bold mt-0.5 ${c.c.split(" ")[0]}`}>{c.v}</p>
+            </div>
+          ))}
+        </div>
 
         {/* Filters */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6 flex flex-wrap gap-4 items-center">
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700">
-              Category:
-            </label>
-            <select
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            >
-              <option value="ALL">All</option>
-              <option value="IT">IT</option>
-              <option value="FACILITY">Facility</option>
-              <option value="ACADEMIC">Academic</option>
-              <option value="OTHER">Other</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700">Status:</label>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            >
-              <option value="ALL">All</option>
-              <option value="OPEN">Open</option>
-              <option value="IN_PROGRESS">In Progress</option>
-              <option value="CLOSED">Closed</option>
-            </select>
-          </div>
-          <span className="text-sm text-gray-500 ml-auto">
-            Showing {filtered.length} of {complaints.length}
-          </span>
+        <div className="flex flex-wrap gap-3 mb-5">
+          <div className="relative"><MdSearch size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…" className="pl-8 pr-4 py-2 rounded-xl border border-slate-200 text-sm focus:border-indigo-500 outline-none bg-white w-44"/></div>
+          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white outline-none focus:border-indigo-500">
+            <option value="ALL">All Status</option><option value="OPEN">Open</option><option value="IN_PROGRESS">In Progress</option><option value="RESOLVED">Resolved</option>
+          </select>
+          <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} className="px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white outline-none focus:border-indigo-500">
+            <option value="ALL">All Categories</option><option value="ACADEMIC">Academic</option><option value="IT">IT</option><option value="FACILITY">Facility</option><option value="OTHER">Other</option>
+          </select>
+          <button onClick={load} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition"><MdRefresh size={15}/>Refresh</button>
         </div>
 
-        {filtered.length > 0 ? (
-          <div className="space-y-4">
-            {filtered.map((complaint) => (
-              <div
-                key={complaint._id}
-                className={`bg-white rounded-lg shadow p-5 border-l-4 hover:shadow-md transition ${BORDER_COLORS[complaint.status] || "border-gray-400"}`}
-              >
-                <div className="flex justify-between items-start gap-4 flex-wrap">
-                  <div className="flex gap-2 flex-wrap">
-                    <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-semibold">
-                      {complaint.category}
-                    </span>
-                    <span
-                      className={`px-2 py-1 rounded text-xs font-semibold border ${STATUS_STYLES[complaint.status] || "bg-gray-100 text-gray-800"}`}
-                    >
-                      {complaint.status || "OPEN"}
-                    </span>
+        <SectionCard>
+          {loading?<div className="p-10 flex justify-center"><div className="w-6 h-6 rounded-full border-2 border-slate-200 border-t-indigo-500 animate-spin"/></div>
+          :filtered.length===0?<Empty icon={MdMessage} title="No complaints found"/>
+          :<div className="divide-y divide-slate-50">
+            {filtered.map(c=>(
+              <div key={c._id} className="p-4 hover:bg-slate-50 transition">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${STATUS[c.status]?.cls||""}`}>{STATUS[c.status]?.label||c.status}</span>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${CAT_COLOR[c.category]||""}`}>{c.category}</span>
+                    </div>
+                    <p className="text-sm text-slate-800 leading-relaxed">{c.message}</p>
+                    <div className="flex items-center gap-3 mt-2 text-xs text-slate-400">
+                      <span className="flex items-center gap-1"><MdPerson size={11}/>{c.createdBy?.name||"Anonymous"} ({c.createdBy?.role||""})</span>
+                      <span>{new Date(c.createdAt).toLocaleDateString()}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <MdCalendarMonth size={14} />
-                    {new Date(complaint.createdAt).toLocaleString()}
-                  </div>
-                </div>
-
-                <p className="text-gray-800 my-3">{complaint.message}</p>
-
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <MdPerson size={16} />
-                    <span className="font-medium">
-                      {complaint.createdBy?.name || "Unknown"}
-                    </span>
-                    {complaint.createdBy?.role && (
-                      <span className="text-gray-400">
-                        ({complaint.createdBy.role})
-                      </span>
-                    )}
-                    {complaint.createdBy?.dept && (
-                      <span className="text-gray-400">
-                        • {complaint.createdBy.dept}
-                      </span>
-                    )}
-                    {complaint.createdBy?.rollNo && (
-                      <span className="text-gray-400">
-                        • {complaint.createdBy.rollNo}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Status update */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500">
-                      Update status:
-                    </span>
-                    <select
-                      value={complaint.status || "OPEN"}
-                      disabled={updatingId === complaint._id}
-                      onChange={(e) =>
-                        handleStatusChange(complaint._id, e.target.value)
-                      }
-                      className="px-2 py-1 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
-                    >
+                  <div className="shrink-0">
+                    <select value={c.status} onChange={e=>handleStatus(c._id, e.target.value)}
+                      disabled={updatingId===c._id}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold bg-white focus:border-indigo-500 outline-none disabled:opacity-50 cursor-pointer">
                       <option value="OPEN">Open</option>
                       <option value="IN_PROGRESS">In Progress</option>
-                      <option value="CLOSED">Closed</option>
+                      <option value="RESOLVED">Resolved</option>
                     </select>
-                    {updatingId === complaint._id && (
-                      <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                    )}
                   </div>
                 </div>
               </div>
             ))}
-          </div>
-        ) : (
-          <div className="bg-white rounded-lg shadow p-12 text-center">
-            <MdCheckCircle className="text-green-300 mx-auto mb-4" size={48} />
-            <p className="text-gray-600">No complaints found</p>
-          </div>
-        )}
+          </div>}
+        </SectionCard>
       </div>
     </div>
   );
-};
-
-export default ViewComplaints;
+}

@@ -1,221 +1,105 @@
 import { useEffect, useState } from "react";
-import {
-  MdBarChart,
-  MdCampaign,
-  MdCheckCircle,
-  MdDescription,
-  MdGroup,
-  MdMessage,
-  MdSchool,
-  MdSettings,
-} from "react-icons/md";
 import { Link } from "react-router-dom";
-import * as complaintsService from "../../services/complaints";
+import { MdAnalytics, MdCampaign, MdCheckCircle, MdDescription, MdGroup, MdMessage, MdPersonAdd, MdSchool, MdSettings, MdWarning } from "react-icons/md";
 import * as usersService from "../../services/users";
+import * as complaintsService from "../../services/complaints";
 
-const AdminDashboard = () => {
-  const [stats, setStats] = useState({
-    totalUsers: 0,
-    students: 0,
-    faculty: 0,
-    complaints: 0,
-  });
+export default function AdminDashboard() {
+  const [stats, setStats] = useState({ students:0,faculty:0,complaints:0,open:0 });
+  const [recentUsers, setRecentUsers] = useState([]);
+  const [openComplaints, setOpenComplaints] = useState([]);
   const [loading, setLoading] = useState(true);
+  const ROLE_BADGE = { STUDENT:"bg-blue-50 text-blue-700",FACULTY:"bg-emerald-50 text-emerald-700",ADMIN:"bg-violet-50 text-violet-700" };
+  const STATUS_BADGE = { OPEN:"bg-amber-50 text-amber-700",IN_PROGRESS:"bg-blue-50 text-blue-700",RESOLVED:"bg-emerald-50 text-emerald-700" };
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const [usersData, complaintsData] = await Promise.allSettled([
-          usersService.getAllUsers(),
-          complaintsService.getComplaints(),
-        ]);
-        const users =
-          usersData.status === "fulfilled" ? usersData.value?.users || [] : [];
-        const complaints =
-          complaintsData.status === "fulfilled"
-            ? complaintsData.value?.complaints || []
-            : [];
-        setStats({
-          totalUsers: users.length,
-          students: users.filter((u) => u.role === "STUDENT").length,
-          faculty: users.filter((u) => u.role === "FACULTY").length,
-          complaints: complaints.length,
-        });
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  useEffect(()=>{
+    Promise.allSettled([usersService.getAllUsers(), complaintsService.getComplaints()]).then(([ur,cr])=>{
+      if(ur.status==="fulfilled"){ const u=ur.value?.users||[]; setStats(s=>({...s,students:u.filter(x=>x.role==="STUDENT").length,faculty:u.filter(x=>x.role==="FACULTY").length})); setRecentUsers(u.slice(0,5)); }
+      if(cr.status==="fulfilled"){ const c=cr.value?.data||[]; setStats(s=>({...s,complaints:c.length,open:c.filter(x=>x.status==="OPEN").length})); setOpenComplaints(c.filter(x=>x.status==="OPEN").slice(0,4)); }
+    }).finally(()=>setLoading(false));
+  },[]);
 
-  if (loading)
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
-      </div>
-    );
+  const quickLinks = [
+    { to:"/admin/users",         icon:MdGroup,        label:"Manage Users",       color:"#6366f1",bg:"#eef2ff" },
+    { to:"/admin/complaints",    icon:MdMessage,      label:"Complaints",         color:"#ef4444",bg:"#fef2f2" },
+    { to:"/admin/notices",       icon:MdDescription,  label:"Notices",            color:"#f59e0b",bg:"#fffbeb" },
+    { to:"/admin/announcements", icon:MdCampaign,     label:"Announcements",      color:"#8b5cf6",bg:"#f5f3ff" },
+    { to:"/admin/reports",       icon:MdAnalytics,    label:"Reports",            color:"#10b981",bg:"#ecfdf5" },
+    { to:"/admin/settings",      icon:MdSettings,     label:"Settings",           color:"#6b7280",bg:"#f9fafb" },
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-linear-to-r from-purple-600 to-purple-800 text-white py-8 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <MdSettings size={32} /> Admin Dashboard
-          </h1>
-          <p className="mt-2 text-purple-100">
-            System Administration & Management
-          </p>
+    <div className="p-4 sm:p-6 pt-14 lg:pt-6 min-h-screen bg-slate-50 fade-up">
+      <div className="rounded-2xl p-5 mb-5 text-white relative overflow-hidden" style={{ background:"linear-gradient(135deg,#7c3aed,#8b5cf6)" }}>
+        <div className="absolute inset-0 pointer-events-none opacity-[0.06]" style={{ backgroundImage:"linear-gradient(rgba(255,255,255,0.8) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.8) 1px,transparent 1px)",backgroundSize:"30px 30px" }}/>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center"><MdSchool size={22}/></div>
+          <div><h1 className="text-xl font-extrabold">Admin Dashboard</h1><p className="text-violet-200 text-xs mt-0.5">Smart Campus Management</p></div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        {/* Stats */}
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
-          {[
-            {
-              label: "Total Users",
-              value: stats.totalUsers,
-              icon: <MdGroup size={36} />,
-              color: "border-blue-500",
-              iconColor: "text-blue-400",
-            },
-            {
-              label: "Students",
-              value: stats.students,
-              icon: <MdSchool size={36} />,
-              color: "border-green-500",
-              iconColor: "text-green-400",
-            },
-            {
-              label: "Faculty",
-              value: stats.faculty,
-              icon: <MdSchool size={36} />,
-              color: "border-orange-500",
-              iconColor: "text-orange-400",
-            },
-            {
-              label: "Complaints",
-              value: stats.complaints,
-              icon: <MdMessage size={36} />,
-              color: "border-red-500",
-              iconColor: "text-red-400",
-            },
-          ].map((s) => (
-            <div
-              key={s.label}
-              className={`bg-white rounded-lg shadow-md p-6 border-l-4 ${s.color}`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm font-medium">{s.label}</p>
-                  <p className="text-3xl font-bold text-gray-900 mt-2">
-                    {s.value}
-                  </p>
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        {[
+          { l:"Students",      v:stats.students,   c:"#6366f1" },
+          { l:"Faculty",       v:stats.faculty,    c:"#10b981" },
+          { l:"Complaints",    v:stats.complaints, c:"#f59e0b" },
+          { l:"Open Issues",   v:stats.open,       c:"#ef4444" },
+        ].map(s=>(
+          <div key={s.l} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4" style={{ borderLeft:`3px solid ${s.c}` }}>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">{s.l}</p>
+            <p className="text-2xl font-extrabold mt-1" style={{ color:s.c }}>{loading?"—":s.v}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-5">
+        <div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+            <h2 className="font-bold text-slate-900 text-sm mb-3">Quick Actions</h2>
+            <div className="space-y-2">
+              {quickLinks.map(l=>{const Icon=l.icon; return <Link key={l.to} to={l.to} className="flex items-center gap-3 p-3 rounded-xl hover:opacity-80 transition" style={{ background:l.bg }}><Icon size={16} style={{ color:l.color }}/><span className="text-sm font-semibold" style={{ color:l.color }}>{l.label}</span></Link>;})}</div>
+          </div>
+        </div>
+
+        <div className="lg:col-span-2 space-y-5">
+          {/* Recent users */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-2"><MdPersonAdd size={17} className="text-indigo-500"/><h2 className="font-bold text-slate-900 text-sm">Recent Users</h2></div>
+              <Link to="/admin/users" className="text-xs text-indigo-600 font-semibold hover:underline">Manage →</Link>
+            </div>
+            {loading?<div className="p-6 flex justify-center"><div className="w-4 h-4 rounded-full border-2 border-slate-200 border-t-indigo-500 animate-spin"/></div>
+            :<div className="divide-y divide-slate-50">
+              {recentUsers.map((u,i)=>(
+                <div key={u._id||i} className="flex items-center gap-3 px-5 py-3">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background:u.role==="STUDENT"?"#6366f1":u.role==="FACULTY"?"#10b981":"#8b5cf6" }}>{u.name?.charAt(0)?.toUpperCase()}</div>
+                  <div className="flex-1 min-w-0"><p className="font-semibold text-slate-900 text-sm truncate">{u.name}</p><p className="text-xs text-slate-400 truncate">{u.email}</p></div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${ROLE_BADGE[u.role]||""}`}>{u.role}</span>
                 </div>
-                <div className={s.iconColor}>{s.icon}</div>
-              </div>
-            </div>
-          ))}
-        </div>
+              ))}
+            </div>}
+          </div>
 
-        {/* Quick Actions */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          <Link
-            to="/admin/users"
-            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition flex items-start gap-4"
-          >
-            <MdGroup className="text-blue-500 mt-1" size={32} />
-            <div>
-              <h3 className="font-semibold text-gray-900">Manage Users</h3>
-              <p className="text-sm text-gray-600 mt-1">
-                View and manage all accounts
-              </p>
+          {/* Open complaints */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-2"><MdMessage size={17} className="text-red-500"/><h2 className="font-bold text-slate-900 text-sm">Open Complaints</h2></div>
+              <Link to="/admin/complaints" className="text-xs text-red-500 font-semibold hover:underline">Resolve →</Link>
             </div>
-          </Link>
-          <Link
-            to="/admin/complaints"
-            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition flex items-start gap-4"
-          >
-            <MdMessage className="text-red-500 mt-1" size={32} />
-            <div>
-              <h3 className="font-semibold text-gray-900">View Complaints</h3>
-              <p className="text-sm text-gray-600 mt-1">
-                Review and resolve student complaints
-              </p>
-            </div>
-          </Link>
-          <Link
-            to="/admin/notices"
-            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition flex items-start gap-4"
-          >
-            <MdDescription className="text-orange-500 mt-1" size={32} />
-            <div>
-              <h3 className="font-semibold text-gray-900">Manage Notices</h3>
-              <p className="text-sm text-gray-600 mt-1">Control all notices</p>
-            </div>
-          </Link>
-          <Link
-            to="/admin/announcements"
-            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition flex items-start gap-4"
-          >
-            <MdCampaign className="text-purple-500 mt-1" size={32} />
-            <div>
-              <h3 className="font-semibold text-gray-900">
-                Manage Announcements
-              </h3>
-              <p className="text-sm text-gray-600 mt-1">
-                System-wide announcements
-              </p>
-            </div>
-          </Link>
-          <Link
-            to="/admin/reports"
-            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition flex items-start gap-4"
-          >
-            <MdBarChart className="text-indigo-500 mt-1" size={32} />
-            <div>
-              <h3 className="font-semibold text-gray-900">
-                Reports & Analytics
-              </h3>
-              <p className="text-sm text-gray-600 mt-1">
-                View system statistics and trends
-              </p>
-            </div>
-          </Link>
-          <Link
-            to="/admin/settings"
-            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition flex items-start gap-4"
-          >
-            <MdSettings className="text-gray-500 mt-1" size={32} />
-            <div>
-              <h3 className="font-semibold text-gray-900">System Settings</h3>
-              <p className="text-sm text-gray-600 mt-1">
-                Configure system parameters
-              </p>
-            </div>
-          </Link>
-        </div>
-
-        {/* System Status */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-            <MdCheckCircle className="text-green-500" /> System Status
-          </h2>
-          <div className="space-y-3">
-            {["Database", "Server", "API Services"].map((svc) => (
-              <div key={svc} className="flex items-center justify-between">
-                <span className="text-gray-700">{svc}</span>
-                <span className="flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded text-sm font-semibold">
-                  <MdCheckCircle size={14} /> Online
-                </span>
-              </div>
-            ))}
+            {loading?<div className="p-6 flex justify-center"><div className="w-4 h-4 rounded-full border-2 border-slate-200 border-t-red-500 animate-spin"/></div>
+            :openComplaints.length===0?<div className="py-10 text-center"><MdCheckCircle size={32} className="text-emerald-300 mx-auto mb-2"/><p className="text-slate-400 text-sm">No open complaints 🎉</p></div>
+            :<div className="divide-y divide-slate-50">
+              {openComplaints.map((c,i)=>(
+                <div key={c._id||i} className="flex items-start gap-3 px-5 py-3.5">
+                  <div className="flex-1 min-w-0"><p className="text-sm text-slate-800 font-medium line-clamp-1">{c.message}</p><p className="text-xs text-slate-400 mt-0.5">{c.createdBy?.name} · {c.category} · {new Date(c.createdAt).toLocaleDateString()}</p></div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${STATUS_BADGE[c.status]||""}`}>{c.status}</span>
+                </div>
+              ))}
+            </div>}
           </div>
         </div>
       </div>
     </div>
   );
-};
-
-export default AdminDashboard;
+}
