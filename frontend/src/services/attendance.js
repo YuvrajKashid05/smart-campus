@@ -1,22 +1,22 @@
-import api from './api';
+import api from "./api";
 
 export const startSession = async (sessionData) => {
-  const response = await api.post('/attendance/start', sessionData);
+  const response = await api.post("/attendance/start", sessionData);
   return response.data;
 };
 
 export const markAttendance = async (qrToken) => {
-  const response = await api.post('/attendance/mark', { qrToken });
+  const response = await api.post("/attendance/mark", { qrToken });
   return response.data;
 };
 
 export const getMyAttendanceSummary = async () => {
-  const response = await api.get('/attendance/my-summary');
+  const response = await api.get("/attendance/my-summary");
   return response.data;
 };
 
 export const getMySessions = async () => {
-  const response = await api.get('/attendance/sessions');
+  const response = await api.get("/attendance/sessions");
   return response.data;
 };
 
@@ -30,7 +30,7 @@ export const manualMarkStudent = async (sessionId, studentId) => {
   return response.data;
 };
 
-export const getDefaulters = async (filters) => {
-  const response = await api.get('/attendance/defaulters', { params: filters });
+export const getDefaulters = async (filters = {}) => {
+  const response = await api.get("/attendance/defaulters", { params: filters });
   return response.data;
 };

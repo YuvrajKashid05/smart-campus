@@ -1,294 +1,220 @@
-import { z } from "zod";
 import Timetable from "../models/timetable.model.js";
 
-const timetableSchema = z.object({
-  dept: z.string().min(2),
-  semester: z.number().min(1).max(8),
-  section: z.string().min(1),
-  day: z.enum(["MON", "TUE", "WED", "THU", "FRI"]),
-  slotType: z.enum(["LECTURE", "BREAK"]),
-  title: z.string().min(2),
-  subject: z.string().optional(),
-  room: z.string().optional(),
-  startTime: z.string().min(4),
-  endTime: z.string().min(4)
-});
+const normalizeDay = (day = "") => {
+  const map = {
+    MONDAY: "MON",
+    TUESDAY: "TUE",
+    WEDNESDAY: "WED",
+    THURSDAY: "THU",
+    FRIDAY: "FRI",
+    MON: "MON",
+    TUE: "TUE",
+    WED: "WED",
+    THU: "THU",
+    FRI: "FRI",
+  };
 
-function timeToMinutes(timeStr) {
-  const [h, m] = timeStr.split(":").map(Number);
-  return h * 60 + m;
-}
+  return map[String(day).trim().toUpperCase()] || "MON";
+};
 
-export async function createTimetableSlot(req, res) {
+const toMinutes = (time = "") => {
+  const [h = "0", m = "0"] = String(time).split(":");
+  return Number(h) * 60 + Number(m);
+};
+
+export async function createTimetable(req, res) {
   try {
-    const parsed = timetableSchema.safeParse({
-      ...req.body,
-      semester: Number(req.body.semester),
-      dept: req.body.dept?.trim().toUpperCase(),
-      section: req.body.section?.trim().toUpperCase()
-    });
+    const {
+      dept,
+      semester,
+      section,
+      day,
+      slotType,
+      title,
+      subject,
+      room,
+      startTime,
+      endTime,
+    } = req.body;
 
-    if (!parsed.success) {
-      return res.status(400).json({
-        ok: false,
-        error: parsed.error.flatten()
-      });
+    if (!dept || !semester || !section || !day || !title || !startTime || !endTime) {
+      return res.status(400).json({ ok: false, error: "Missing required fields" });
     }
 
-    if (timeToMinutes(parsed.data.startTime) >= timeToMinutes(parsed.data.endTime)) {
-      return res.status(400).json({
-        ok: false,
-        error: "Start time must be before end time"
-      });
+    if (toMinutes(endTime) <= toMinutes(startTime)) {
+      return res.status(400).json({ ok: false, error: "End time must be after start time" });
     }
 
-    const exists = await Timetable.findOne({
-      dept: parsed.data.dept,
-      semester: parsed.data.semester,
-      section: parsed.data.section,
-      day: parsed.data.day,
-      startTime: parsed.data.startTime
-    });
-
-    if (exists) {
-      return res.status(409).json({
-        ok: false,
-        error: "This slot already exists for this class"
-      });
-    }
-
-    const timetable = await Timetable.create({
-      dept: parsed.data.dept,
-      semester: parsed.data.semester,
-      section: parsed.data.section,
-      day: parsed.data.day,
-      slotType: parsed.data.slotType,
-      title: parsed.data.title.trim(),
-      subject: parsed.data.slotType === "BREAK" ? "" : parsed.data.subject?.trim() || "",
-      room: parsed.data.room?.trim() || "",
-      faculty: parsed.data.slotType === "BREAK" ? null : req.user._id,
+    const payload = {
+      dept: String(dept).trim().toUpperCase(),
+      semester: Number(semester),
+      section: String(section).trim().toUpperCase(),
+      day: normalizeDay(day),
+      slotType: slotType || "LECTURE",
+      title: String(title).trim(),
+      subject: slotType === "BREAK" ? "" : String(subject || "").trim(),
+      room: String(room || "").trim(),
+      startTime,
+      endTime,
       createdBy: req.user._id,
-      startTime: parsed.data.startTime,
-      endTime: parsed.data.endTime
-    });
+    };
+
+    if (payload.slotType === "LECTURE" && req.user.role === "faculty") {
+      payload.faculty = req.user._id;
+    } else {
+      payload.faculty = null;
+    }
+
+    const slot = await Timetable.create(payload);
+
+    const saved = await Timetable.findById(slot._id)
+      .populate("faculty", "name email")
+      .populate("createdBy", "name email role");
 
     return res.status(201).json({
       ok: true,
-      timetable
+      timetable: saved,
     });
-  } catch (err) {
-    console.error("CREATE TIMETABLE SLOT ERROR:", err);
-    return res.status(500).json({
-      ok: false,
-      error: "Server error"
-    });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message || "Failed to create timetable" });
   }
 }
 
-export async function listTimetableSlots(req, res) {
+export async function getAllTimetables(req, res) {
   try {
-    const { dept, semester, section, day } = req.query;
+    const { dept, semester, section } = req.query;
 
     const filter = {};
-
-    if (dept) filter.dept = dept.trim().toUpperCase();
+    if (dept) filter.dept = String(dept).trim().toUpperCase();
     if (semester) filter.semester = Number(semester);
-    if (section) filter.section = section.trim().toUpperCase();
-    if (day) filter.day = day;
+    if (section) filter.section = String(section).trim().toUpperCase();
 
     const timetables = await Timetable.find(filter)
-      .populate("faculty", "name email role")
-      .sort({ day: 1, startTime: 1 });
+      .sort({ day: 1, startTime: 1 })
+      .populate("faculty", "name email")
+      .populate("createdBy", "name email role");
 
-    return res.json({
-      ok: true,
-      timetables
-    });
-  } catch (err) {
-    console.error("LIST TIMETABLE SLOTS ERROR:", err);
-    return res.status(500).json({
-      ok: false,
-      error: "Server error"
-    });
+    return res.json({ ok: true, timetables });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message || "Failed to fetch timetables" });
   }
 }
 
-export async function getMyTimetable(req, res) {
+export async function getStudentTimetable(req, res) {
   try {
-    if (!req.user?.dept || !req.user?.semester || !req.user?.section) {
+    const dept = req.user?.dept;
+    const semester = req.user?.semester;
+    const section = req.user?.section;
+
+    if (!dept || !semester || !section) {
       return res.status(400).json({
         ok: false,
-        error: "Student profile is incomplete"
+        error: "Student profile missing dept, semester or section",
       });
     }
 
     const timetables = await Timetable.find({
-      dept: req.user.dept,
-      semester: req.user.semester,
-      section: req.user.section
+      dept: String(dept).trim().toUpperCase(),
+      semester: Number(semester),
+      section: String(section).trim().toUpperCase(),
     })
-      .populate("faculty", "name email role")
-      .sort({ day: 1, startTime: 1 });
+      .sort({ day: 1, startTime: 1 })
+      .populate("faculty", "name email")
+      .populate("createdBy", "name email role");
 
-    return res.json({
-      ok: true,
-      timetables
-    });
-  } catch (err) {
-    console.error("MY TIMETABLE ERROR:", err);
-    return res.status(500).json({
-      ok: false,
-      error: "Server error"
-    });
+    return res.json({ ok: true, timetables });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message || "Failed to fetch student timetable" });
   }
 }
 
-export async function getTimetableSlotById(req, res) {
+export async function getFacultyOwnTimetable(req, res) {
   try {
-    const timetable = await Timetable.findById(req.params.id).populate(
-      "faculty",
-      "name email role"
-    );
+    const timetables = await Timetable.find({
+      faculty: req.user._id,
+    })
+      .sort({ day: 1, startTime: 1 })
+      .populate("faculty", "name email")
+      .populate("createdBy", "name email role");
 
-    if (!timetable) {
-      return res.status(404).json({
-        ok: false,
-        error: "Timetable slot not found"
-      });
-    }
-
-    return res.json({
-      ok: true,
-      timetable
-    });
-  } catch (err) {
-    console.error("GET TIMETABLE SLOT ERROR:", err);
-    return res.status(500).json({
-      ok: false,
-      error: "Server error"
-    });
+    return res.json({ ok: true, timetables });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message || "Failed to fetch faculty timetable" });
   }
 }
 
-export async function updateTimetableSlot(req, res) {
+export async function updateTimetable(req, res) {
   try {
-    const timetable = await Timetable.findById(req.params.id);
+    const { id } = req.params;
+    const existing = await Timetable.findById(id);
 
-    if (!timetable) {
-      return res.status(404).json({
-        ok: false,
-        error: "Timetable slot not found"
-      });
+    if (!existing) {
+      return res.status(404).json({ ok: false, error: "Timetable slot not found" });
     }
 
     if (
-      req.user.role !== "ADMIN" &&
-      timetable.createdBy.toString() !== req.user._id.toString()
+      req.user.role === "faculty" &&
+      existing.faculty &&
+      String(existing.faculty) !== String(req.user._id)
     ) {
-      return res.status(403).json({
-        ok: false,
-        error: "Forbidden"
-      });
+      return res.status(403).json({ ok: false, error: "You can only update your own slots" });
     }
 
-    const parsed = timetableSchema.safeParse({
-      ...req.body,
-      semester: Number(req.body.semester),
-      dept: req.body.dept?.trim().toUpperCase(),
-      section: req.body.section?.trim().toUpperCase()
-    });
+    const payload = { ...req.body };
 
-    if (!parsed.success) {
-      return res.status(400).json({
-        ok: false,
-        error: parsed.error.flatten()
-      });
+    if (payload.day) payload.day = normalizeDay(payload.day);
+    if (payload.dept) payload.dept = String(payload.dept).trim().toUpperCase();
+    if (payload.section) payload.section = String(payload.section).trim().toUpperCase();
+    if (payload.semester) payload.semester = Number(payload.semester);
+
+    const startTime = payload.startTime || existing.startTime;
+    const endTime = payload.endTime || existing.endTime;
+
+    if (toMinutes(endTime) <= toMinutes(startTime)) {
+      return res.status(400).json({ ok: false, error: "End time must be after start time" });
     }
 
-    if (timeToMinutes(parsed.data.startTime) >= timeToMinutes(parsed.data.endTime)) {
-      return res.status(400).json({
-        ok: false,
-        error: "Start time must be before end time"
-      });
+    if ((payload.slotType || existing.slotType) === "BREAK") {
+      payload.subject = "";
+      payload.faculty = null;
+    } else if (req.user.role === "faculty") {
+      payload.faculty = req.user._id;
     }
 
-    const duplicate = await Timetable.findOne({
-      _id: { $ne: req.params.id },
-      dept: parsed.data.dept,
-      semester: parsed.data.semester,
-      section: parsed.data.section,
-      day: parsed.data.day,
-      startTime: parsed.data.startTime
-    });
+    const updated = await Timetable.findByIdAndUpdate(id, payload, {
+      new: true,
+      runValidators: true,
+    })
+      .populate("faculty", "name email")
+      .populate("createdBy", "name email role");
 
-    if (duplicate) {
-      return res.status(409).json({
-        ok: false,
-        error: "Another slot already exists at this time"
-      });
-    }
-
-    Object.assign(timetable, {
-      dept: parsed.data.dept,
-      semester: parsed.data.semester,
-      section: parsed.data.section,
-      day: parsed.data.day,
-      slotType: parsed.data.slotType,
-      title: parsed.data.title.trim(),
-      subject: parsed.data.slotType === "BREAK" ? "" : parsed.data.subject?.trim() || "",
-      room: parsed.data.room?.trim() || "",
-      faculty: parsed.data.slotType === "BREAK" ? null : timetable.faculty || req.user._id,
-      startTime: parsed.data.startTime,
-      endTime: parsed.data.endTime
-    });
-
-    await timetable.save();
-
-    return res.json({
-      ok: true,
-      timetable
-    });
-  } catch (err) {
-    console.error("UPDATE TIMETABLE SLOT ERROR:", err);
-    return res.status(500).json({
-      ok: false,
-      error: "Server error"
-    });
+    return res.json({ ok: true, timetable: updated });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message || "Failed to update timetable" });
   }
 }
 
-export async function deleteTimetableSlot(req, res) {
+export async function deleteTimetable(req, res) {
   try {
-    const timetable = await Timetable.findById(req.params.id);
+    const { id } = req.params;
+    const existing = await Timetable.findById(id);
 
-    if (!timetable) {
-      return res.status(404).json({
-        ok: false,
-        error: "Timetable slot not found"
-      });
+    if (!existing) {
+      return res.status(404).json({ ok: false, error: "Timetable slot not found" });
     }
 
     if (
-      req.user.role !== "ADMIN" &&
-      timetable.createdBy.toString() !== req.user._id.toString()
+      req.user.role === "faculty" &&
+      existing.faculty &&
+      String(existing.faculty) !== String(req.user._id)
     ) {
-      return res.status(403).json({
-        ok: false,
-        error: "Forbidden"
-      });
+      return res.status(403).json({ ok: false, error: "You can only delete your own slots" });
     }
 
-    await timetable.deleteOne();
+    await Timetable.findByIdAndDelete(id);
 
-    return res.json({
-      ok: true,
-      message: "Timetable slot deleted successfully"
-    });
-  } catch (err) {
-    console.error("DELETE TIMETABLE SLOT ERROR:", err);
-    return res.status(500).json({
-      ok: false,
-      error: "Server error"
-    });
+    return res.json({ ok: true, message: "Timetable slot deleted successfully" });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message || "Failed to delete timetable" });
   }
 }

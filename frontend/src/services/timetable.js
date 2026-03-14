@@ -1,39 +1,55 @@
-import api from './api';
+import api from "./api";
 
-// Get all timetable slots (with optional filters)
-export const getTimetable = async (filters) => {
-  const response = await api.get('/timetables', { params: filters });
-  return response.data;
+export const getTimetable = async (filters = {}) => {
+  const { data } = await api.get("/timetables", { params: filters });
+  return data;
 };
 
-// Get student's personal timetable (uses /my which reads from JWT)
-export const getStudentTimetable = async () => {
-  const response = await api.get('/timetables/my');
-  return response.data;
+export const getMyTimetable = async () => {
+  const { data } = await api.get("/timetables/my");
+  return data;
 };
 
-// List timetable by dept/semester/section
-export const getTimetableByClass = async (dept, semester, section) => {
-  const response = await api.get('/timetables', {
-    params: { dept, semester, section }
+export const getStudentTimetable = getMyTimetable;
+
+export const getFacultyTimetable = async () => {
+  const { data } = await api.get("/timetables/faculty/my");
+  return data;
+};
+
+export const createTimetableSlot = async (payload) => {
+  const { data } = await api.post("/timetables", {
+    dept: String(payload.dept || "").trim().toUpperCase(),
+    semester: Number(payload.semester),
+    section: String(payload.section || "").trim().toUpperCase(),
+    day: payload.day,
+    slotType: payload.slotType,
+    title: String(payload.title || "").trim(),
+    subject: payload.slotType === "BREAK" ? "" : String(payload.subject || "").trim(),
+    room: String(payload.room || "").trim(),
+    startTime: payload.startTime,
+    endTime: payload.endTime,
   });
-  return response.data;
+  return data;
 };
 
-// Create timetable slot (Faculty/Admin)
-export const createTimetable = async (timetableData) => {
-  const response = await api.post('/timetables', timetableData);
-  return response.data;
+export const updateTimetableSlot = async (id, payload) => {
+  const { data } = await api.put(`/timetables/${id}`, {
+    dept: String(payload.dept || "").trim().toUpperCase(),
+    semester: Number(payload.semester),
+    section: String(payload.section || "").trim().toUpperCase(),
+    day: payload.day,
+    slotType: payload.slotType,
+    title: String(payload.title || "").trim(),
+    subject: payload.slotType === "BREAK" ? "" : String(payload.subject || "").trim(),
+    room: String(payload.room || "").trim(),
+    startTime: payload.startTime,
+    endTime: payload.endTime,
+  });
+  return data;
 };
 
-// Update timetable slot
-export const updateTimetable = async (id, timetableData) => {
-  const response = await api.put(`/timetables/${id}`, timetableData);
-  return response.data;
-};
-
-// Delete timetable slot
-export const deleteTimetable = async (id) => {
-  const response = await api.delete(`/timetables/${id}`);
-  return response.data;
+export const deleteTimetableSlot = async (id) => {
+  const { data } = await api.delete(`/timetables/${id}`);
+  return data;
 };

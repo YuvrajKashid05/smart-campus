@@ -1,10 +1,7 @@
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
-
 import connectDB from "./config/db.js";
-
-// routes
 import aiRoutes from "./routes/ai.routes.js";
 import announcementRoutes from "./routes/announcement.routes.js";
 import attendanceRoutes from "./routes/attendance.routes.js";
@@ -18,18 +15,28 @@ import userRoutes from "./routes/user.routes.js";
 dotenv.config();
 
 const app = express();
+const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:5173")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
 
-// middlewares
-app.use(cors({ origin: "http://localhost:5173", credentials: true }));
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+  }),
+);
 app.use(express.json({ limit: "1mb" }));
 
-// test route
-app.get("/", (req, res) => {
-  res.send("Smart Campus API running 🚀");
+app.get("/", (_req, res) => {
+  res.send("Smart Campus API running");
 });
 
-// routes mount
-app.use("/api/ai", chatbotRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/notices", noticeRoutes);
@@ -38,24 +45,21 @@ app.use("/api/complaints", complaintRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/timetables", timetableRoutes);
 app.use("/api/ai", aiRoutes);
+app.use("/api/chatbot", chatbotRoutes);
 
-// 404 handler
 app.use((req, res) => {
-  res.status(404).json({ ok: false, error: "Route not found" });
+  res.status(404).json({ ok: false, error: `Route not found: ${req.method} ${req.originalUrl}` });
 });
 
 const PORT = process.env.PORT || 5000;
 
-// Start server ONLY after DB connects
-connectDB(process.env.MONGO_URI)
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`✅ DB connected`);
-      console.log(`🚀 Server running at http://localhost:${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error("❌ DB connection error:", err?.message || err);
-    process.exit(1);
+try {
+  await connectDB(process.env.MONGO_URI);
+  app.listen(PORT, () => {
+    console.log("✅ DB connected");
+    console.log(`🚀 Server running at http://localhost:${PORT}`);
   });
-
+} catch (err) {
+  console.error("❌ DB connection error:", err?.message || err);
+  process.exit(1);
+}

@@ -1,5 +1,4 @@
 import ai from "../config/gemini.js";
-
 import Announcement from "../models/announcement.model.js";
 import AttendanceRecord from "../models/attendanceRecord.model.js";
 import Complaint from "../models/complaint.model.js";
@@ -7,9 +6,8 @@ import Notice from "../models/notice.model.js";
 import Timetable from "../models/timetable.model.js";
 import User from "../models/user.model.js";
 
-function detectIntent(message) {
+function detectIntent(message = "") {
   const text = message.toLowerCase();
-
   if (text.includes("attendance")) return "attendance";
   if (text.includes("timetable") || text.includes("class") || text.includes("schedule")) return "timetable";
   if (text.includes("notice")) return "notices";
@@ -18,7 +16,6 @@ function detectIntent(message) {
   if (text.includes("profile") || text.includes("my details")) return "profile";
   if (text.includes("defaulter")) return "defaulters";
   if (text.includes("all users") || text.includes("student list") || text.includes("users")) return "users";
-
   return "general";
 }
 
@@ -192,10 +189,7 @@ async function buildSafeContext(user, intent) {
       .select("name email role dept semester section isActive")
       .limit(20);
 
-    return {
-      type: "users",
-      data: users,
-    };
+    return { type: "users", data: users };
   }
 
   return {
@@ -207,7 +201,6 @@ async function buildSafeContext(user, intent) {
 export async function chatWithCampusBot(req, res) {
   try {
     const { message } = req.body;
-
     if (!message || !message.trim()) {
       return res.status(400).json({ ok: false, error: "Message is required" });
     }
@@ -220,38 +213,33 @@ export async function chatWithCampusBot(req, res) {
     const intent = detectIntent(message);
     const context = await buildSafeContext(user, intent);
 
+    const prompt = [
+      "You are Smart Campus AI Assistant.",
+      "Rules:",
+      "1. Answer only from the provided campus context whenever campus data is available.",
+      "2. Never reveal confidential or unauthorized information.",
+      "3. If the user asks for restricted data, clearly refuse.",
+      "4. If the question is general study-related and no campus data is needed, answer briefly and safely.",
+      "5. Keep answers short, clear, and role-appropriate.",
+      `User role: ${user.role}`,
+      `Detected intent: ${intent}`,
+      `User message: ${message}`,
+      `Campus context: ${JSON.stringify(context, null, 2)}`,
+    ].join("\n");
+
     const response = await ai.models.generateContent({
       model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
-      contents: `
-You are Smart Campus AI Assistant.
-
-Rules:
-1. Answer only from the provided campus context whenever campus data is available.
-2. Never reveal confidential or unauthorized information.
-3. If the user asks for restricted data, clearly refuse.
-4. If the question is general study-related and no campus data is needed, answer briefly and safely.
-5. Keep answers short, clear, and role-appropriate.
-
-User role: ${user.role}
-Detected intent: ${intent}
-User message: ${message}
-
-Campus context:
-${JSON.stringify(context, null, 2)}
-`,
+      contents: prompt,
     });
 
     return res.json({
       ok: true,
       intent,
       contextType: context.type,
-      answer: response.text,
+      answer: response?.text || "No answer generated.",
     });
   } catch (error) {
     console.error("CHATBOT ERROR:", error);
-    return res.status(500).json({
-      ok: false,
-      error: error?.message || "Failed to get chatbot response",
-    });
+    return res.status(500).json({ ok: false, error: error?.message || "Failed to get chatbot response" });
   }
 }

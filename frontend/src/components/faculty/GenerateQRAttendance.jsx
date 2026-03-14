@@ -1,11 +1,17 @@
-import { useContext, useEffect, useRef, useState } from "react";
-import { MdCheckCircle, MdQrCode2, MdStop } from "react-icons/md";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  MdCheckCircle,
+  MdContentCopy,
+  MdQrCode2,
+  MdStop,
+  MdTimer,
+} from "react-icons/md";
 import { AuthContext } from "../../context/AuthContext";
 import * as attendanceService from "../../services/attendance";
 import { Alert, BTN_PRIMARY, INPUT, PAGE, SELECT } from "../../ui";
 
 const LABEL =
-  "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide";
+  "mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-600";
 const DURATIONS = [5, 10, 15, 20, 30, 45, 60];
 
 export default function GenerateQRAttendance() {
@@ -13,53 +19,115 @@ export default function GenerateQRAttendance() {
   const [form, setForm] = useState({
     course: "",
     dept: user?.dept || "",
-    section: "",
-    semester: "",
+    section: user?.section || "",
+    semester: user?.semester ? String(user.semester) : "",
     ttlMinutes: "15",
   });
   const [session, setSession] = useState(null);
   const [timeLeft, setTimeLeft] = useState(null);
+  const [sessionDuration, setSessionDuration] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
   const intervalRef = useRef(null);
+
+  useEffect(() => {
+    if (user?.dept || user?.section || user?.semester) {
+      setForm((prev) => ({
+        ...prev,
+        dept: prev.dept || user?.dept || "",
+        section: prev.section || user?.section || "",
+        semester:
+          prev.semester || (user?.semester ? String(user.semester) : ""),
+      }));
+    }
+  }, [user]);
 
   useEffect(() => () => clearInterval(intervalRef.current), []);
 
-  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+  const setField = (key, value) =>
+    setForm((prev) => ({ ...prev, [key]: value }));
+
+  const token = useMemo(
+    () => session?.qrToken || session?.token || session?._id || "",
+    [session],
+  );
+
+  const qrPayload = useMemo(
+    () =>
+      token
+        ? {
+            qrToken: token,
+            token,
+            sessionId: session?._id,
+            course: form.course.trim(),
+            dept: form.dept.trim().toUpperCase(),
+            section: form.section.trim().toUpperCase(),
+            semester: form.semester ? Number(form.semester) : 0,
+          }
+        : null,
+    [token, session, form],
+  );
+
+  const qrUrl = qrPayload
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(
+        JSON.stringify(qrPayload),
+      )}`
+    : null;
+
+  const startTimer = (totalSeconds) => {
+    clearInterval(intervalRef.current);
+    setSessionDuration(totalSeconds);
+    setTimeLeft(totalSeconds);
+
+    intervalRef.current = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(intervalRef.current);
+          setSession(null);
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
 
   const handleStart = async (e) => {
     e.preventDefault();
+    setCopied(false);
+
     if (!form.course.trim() || !form.dept.trim()) {
       setError("Course and department are required.");
       return;
     }
+
     setLoading(true);
     setError("");
+
     try {
+      const ttlMinutes = Number.parseInt(form.ttlMinutes, 10) || 15;
+      const semester = form.semester ? Number.parseInt(form.semester, 10) : 0;
+
       const res = await attendanceService.startSession({
-        course: form.course,
-        dept: form.dept,
-        section: form.section,
-        semester: form.semester ? parseInt(form.semester) : 0,
-        ttlMinutes: parseInt(form.ttlMinutes),
+        course: form.course.trim(),
+        dept: form.dept.trim().toUpperCase(),
+        section: form.section.trim().toUpperCase(),
+        semester,
+        ttlMinutes,
       });
-      if (res.ok) {
-        setSession(res.session);
-        let secs = parseInt(form.ttlMinutes) * 60;
-        setTimeLeft(secs);
-        clearInterval(intervalRef.current);
-        intervalRef.current = setInterval(() => {
-          secs--;
-          setTimeLeft(secs);
-          if (secs <= 0) {
-            clearInterval(intervalRef.current);
-            setSession(null);
-            setTimeLeft(null);
-          }
-        }, 1000);
-      } else setError(res.error || "Failed to start session.");
+
+      if (!res?.ok || !res?.session) {
+        throw new Error(res?.error || "Failed to start session.");
+      }
+
+      setSession(res.session);
+      startTimer(ttlMinutes * 60);
     } catch (err) {
-      setError(err.response?.data?.error || "Failed.");
+      setError(
+        err?.response?.data?.error ||
+          err?.message ||
+          "Failed to start session.",
+      );
     } finally {
       setLoading(false);
     }
@@ -69,82 +137,120 @@ export default function GenerateQRAttendance() {
     clearInterval(intervalRef.current);
     setSession(null);
     setTimeLeft(null);
+    setSessionDuration(0);
+  };
+
+  const handleCopyToken = async () => {
+    if (!token) return;
+    try {
+      await navigator.clipboard.writeText(token);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
   };
 
   const mins = timeLeft != null ? Math.floor(timeLeft / 60) : 0;
   const secs = timeLeft != null ? timeLeft % 60 : 0;
   const pct =
-    timeLeft != null ? (timeLeft / (parseInt(form.ttlMinutes) * 60)) * 100 : 0;
+    timeLeft != null && sessionDuration > 0
+      ? (timeLeft / sessionDuration) * 100
+      : 0;
   const urgent = timeLeft != null && timeLeft < 60;
 
-  const qrUrl = session
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(JSON.stringify({ token: session.qrToken || session.token || session._id, course: form.course, dept: form.dept }))}`
-    : null;
-
   return (
-    <div className={PAGE + " fade-up"}>
-      <div className="max-w-4xl mx-auto">
+    <div className={`${PAGE} fade-up`}>
+      <div className="mx-auto max-w-6xl">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-slate-900">
             Generate QR Attendance
           </h1>
-          <p className="text-slate-500 text-sm mt-0.5">
-            Start a session and display the QR code for students to scan
+          <p className="mt-1 text-sm text-slate-500">
+            Create a live attendance session. Students can scan the QR or paste
+            the token manually.
           </p>
         </div>
+
         {error && (
           <div className="mb-5">
             <Alert type="error">{error}</Alert>
           </div>
         )}
 
-        <div className="grid lg:grid-cols-2 gap-6">
-          {/* Form */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-            <h2 className="font-semibold text-slate-900 text-sm mb-5">
-              {session ? "Session active" : "New session"}
+        <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="mb-5 text-base font-semibold text-slate-900">
+              {session ? "Session running" : "Start new session"}
             </h2>
+
             {session ? (
               <div className="space-y-4">
-                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3">
+                <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                   <MdCheckCircle
                     size={20}
-                    className="text-emerald-500 shrink-0"
+                    className="mt-0.5 shrink-0 text-emerald-600"
                   />
                   <div>
-                    <p className="font-semibold text-emerald-800 text-sm">
-                      Session active!
+                    <p className="font-semibold text-emerald-800">
+                      Attendance session is live
                     </p>
-                    <p className="text-xs text-emerald-700">
+                    <p className="mt-1 text-sm text-emerald-700">
                       {form.course} · {form.dept}
-                      {form.section ? ` · Sec ${form.section}` : ""}
-                      {form.semester ? ` · Sem ${form.semester}` : ""}
+                      {form.section ? ` · Section ${form.section}` : ""}
+                      {form.semester ? ` · Semester ${form.semester}` : ""}
                     </p>
                   </div>
                 </div>
-                {/* Timer */}
+
                 <div
-                  className={`rounded-2xl p-5 ${urgent ? "bg-red-50" : "bg-slate-50"}`}
+                  className={`rounded-2xl border p-5 ${urgent ? "border-red-200 bg-red-50" : "border-slate-200 bg-slate-50"}`}
                 >
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                  <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <MdTimer size={15} />
                     Time remaining
-                  </p>
+                  </div>
                   <p
-                    className={`text-4xl font-extrabold font-mono ${urgent ? "text-red-600" : "text-slate-900"}`}
+                    className={`font-mono text-4xl font-extrabold ${urgent ? "text-red-600" : "text-slate-900"}`}
                   >
                     {String(mins).padStart(2, "0")}:
                     {String(secs).padStart(2, "0")}
                   </p>
-                  <div className="mt-3 h-2 bg-slate-200 rounded-full overflow-hidden">
+                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">
                     <div
                       className={`h-full rounded-full transition-all ${urgent ? "bg-red-500" : "bg-emerald-500"}`}
                       style={{ width: `${pct}%` }}
                     />
                   </div>
                 </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Session token
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleCopyToken}
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      <MdContentCopy size={14} />
+                      {copied ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                  <div className="rounded-xl bg-white px-4 py-3 font-mono text-sm text-slate-800 ring-1 ring-slate-200">
+                    {token || "Token not available"}
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    If scanning fails, students can paste this token on the Mark
+                    Attendance page.
+                  </p>
+                </div>
+
                 <button
+                  type="button"
                   onClick={handleStop}
-                  className="w-full inline-flex items-center justify-center gap-2 py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl transition text-sm"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-red-500 py-3 text-sm font-bold text-white transition hover:bg-red-600"
                 >
                   <MdStop size={16} />
                   Stop Session
@@ -156,85 +262,86 @@ export default function GenerateQRAttendance() {
                   <label className={LABEL}>Course / Subject *</label>
                   <input
                     value={form.course}
-                    onChange={(e) => set("course", e.target.value)}
+                    onChange={(e) => setField("course", e.target.value)}
                     placeholder="e.g. Data Structures"
                     className={INPUT}
                     required
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
                     <label className={LABEL}>Department *</label>
                     <input
                       value={form.dept}
                       onChange={(e) =>
-                        set("dept", e.target.value.toUpperCase())
+                        setField("dept", e.target.value.toUpperCase())
                       }
                       placeholder="CS"
                       className={INPUT}
                       required
                     />
                   </div>
+
                   <div>
-                    <label className={LABEL}>
-                      Section{" "}
-                      <span className="text-slate-400 normal-case font-normal">
-                        (opt)
-                      </span>
-                    </label>
+                    <label className={LABEL}>Section</label>
                     <input
                       value={form.section}
                       onChange={(e) =>
-                        set("section", e.target.value.toUpperCase())
+                        setField("section", e.target.value.toUpperCase())
                       }
                       placeholder="A"
                       className={INPUT}
                     />
                   </div>
                 </div>
-                <div>
-                  <label className={LABEL}>
-                    Semester{" "}
-                    <span className="text-slate-400 normal-case font-normal">
-                      (opt)
-                    </span>
-                  </label>
-                  <select
-                    value={form.semester}
-                    onChange={(e) => set("semester", e.target.value)}
-                    className={SELECT}
-                  >
-                    <option value="">All semesters</option>
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
-                      <option key={s} value={s}>
-                        Semester {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className={LABEL}>Duration</label>
-                  <div className="flex flex-wrap gap-2">
-                    {DURATIONS.map((d) => (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => set("ttlMinutes", String(d))}
-                        className={`px-3 py-1.5 rounded-xl text-sm font-semibold border-2 transition ${form.ttlMinutes === String(d) ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-slate-100 text-slate-600 hover:border-slate-200"}`}
-                      >
-                        {d}m
-                      </button>
-                    ))}
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <label className={LABEL}>Semester</label>
+                    <select
+                      value={form.semester}
+                      onChange={(e) => setField("semester", e.target.value)}
+                      className={SELECT}
+                    >
+                      <option value="">All semesters</option>
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                        <option key={s} value={s}>
+                          Semester {s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className={LABEL}>Duration</label>
+                    <div className="flex flex-wrap gap-2">
+                      {DURATIONS.map((d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => setField("ttlMinutes", String(d))}
+                          className={`rounded-xl border-2 px-3 py-1.5 text-sm font-semibold transition ${
+                            form.ttlMinutes === String(d)
+                              ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300"
+                          }`}
+                        >
+                          {d}m
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
+
                 <button
                   type="submit"
                   disabled={loading}
-                  className={BTN_PRIMARY + " w-full justify-center py-3"}
+                  className={`${BTN_PRIMARY} w-full justify-center py-3`}
                 >
                   {loading ? (
                     <>
-                      <div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
                       Starting…
                     </>
                   ) : (
@@ -248,32 +355,33 @@ export default function GenerateQRAttendance() {
             )}
           </div>
 
-          {/* QR display */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 flex flex-col items-center justify-center">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             {session && qrUrl ? (
-              <div className="text-center w-full">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-4">
-                  Show this to students
+              <div className="text-center">
+                <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Show this QR to students
                 </p>
-                <div className="bg-white border-2 border-slate-100 rounded-2xl p-4 inline-block shadow-lg mb-4">
+                <div className="inline-flex rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
                   <img
                     src={qrUrl}
-                    alt="QR Code"
-                    className="w-64 h-64 object-contain"
+                    alt="Attendance QR Code"
+                    className="h-72 w-72 object-contain"
                   />
                 </div>
-                <p className="font-bold text-slate-900">{form.course}</p>
-                <div className="flex flex-wrap justify-center gap-2 mt-2">
+                <p className="mt-4 text-lg font-bold text-slate-900">
+                  {form.course}
+                </p>
+                <div className="mt-3 flex flex-wrap justify-center gap-2">
                   {[
                     form.dept,
-                    form.section && `Sec ${form.section}`,
-                    form.semester && `Sem ${form.semester}`,
+                    form.section && `Section ${form.section}`,
+                    form.semester && `Semester ${form.semester}`,
                   ]
                     .filter(Boolean)
-                    .map((tag, i) => (
+                    .map((tag, index) => (
                       <span
-                        key={i}
-                        className="text-xs bg-indigo-50 text-indigo-700 font-semibold px-2.5 py-0.5 rounded-full"
+                        key={index}
+                        className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700"
                       >
                         {tag}
                       </span>
@@ -282,19 +390,19 @@ export default function GenerateQRAttendance() {
                 <p
                   className={`mt-4 text-sm font-semibold ${urgent ? "text-red-600" : "text-emerald-600"}`}
                 >
-                  {urgent ? "⚠ Expiring soon!" : "● Session active"}
+                  {urgent ? "⚠ Session expiring soon" : "● Session active"}
                 </p>
               </div>
             ) : (
-              <div className="text-center">
-                <div className="w-24 h-24 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center mx-auto mb-4">
-                  <MdQrCode2 size={40} className="text-slate-300" />
+              <div className="flex min-h-105 flex-col items-center justify-center text-center">
+                <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50">
+                  <MdQrCode2 size={42} className="text-slate-300" />
                 </div>
-                <p className="text-slate-500 font-medium text-sm">
+                <p className="text-sm font-medium text-slate-500">
                   QR code will appear here
                 </p>
-                <p className="text-slate-400 text-xs mt-1">
-                  Fill the form and start a session
+                <p className="mt-1 text-xs text-slate-400">
+                  Fill the form and start a session.
                 </p>
               </div>
             )}

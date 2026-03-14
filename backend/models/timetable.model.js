@@ -5,85 +5,65 @@ const timetableSchema = new mongoose.Schema(
     dept: {
       type: String,
       required: true,
+      uppercase: true,
       trim: true,
-      uppercase: true
     },
-
     semester: {
       type: Number,
       required: true,
-      min: 1,
-      max: 8
     },
-
     section: {
       type: String,
       required: true,
+      uppercase: true,
       trim: true,
-      uppercase: true
     },
-
     day: {
       type: String,
+      enum: ["MON", "TUE", "WED", "THU", "FRI"],
       required: true,
-      enum: ["MON", "TUE", "WED", "THU", "FRI"]
     },
-
     slotType: {
       type: String,
-      required: true,
       enum: ["LECTURE", "BREAK"],
-      default: "LECTURE"
+      default: "LECTURE",
     },
-
     title: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
     },
-
     subject: {
       type: String,
+      trim: true,
       default: "",
-      trim: true
     },
-
     faculty: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      default: null
+      default: null,
     },
-
     room: {
       type: String,
+      trim: true,
       default: "",
-      trim: true
     },
-
     startTime: {
       type: String,
       required: true,
-      trim: true
     },
-
     endTime: {
       type: String,
       required: true,
-      trim: true
     },
-
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true
-    }
+      required: true,
+    },
   },
   { timestamps: true }
 );
 
-timetableSchema.index(
-  { dept: 1, semester: 1, section: 1, day: 1, startTime: 1 },
-  { unique: true }
-);
-
-export default mongoose.model("Timetable", timetableSchema);
+const Timetable = mongoose.model("Timetable", timetableSchema);
+export default Timetable;
