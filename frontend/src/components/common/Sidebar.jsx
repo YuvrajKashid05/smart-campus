@@ -58,9 +58,9 @@ const navByRole = {
 };
 
 const ROLE_META = {
-  STUDENT: { accent: "#818cf8", label: "Student Portal", color: "#6366f1" },
-  FACULTY: { accent: "#34d399", label: "Faculty Portal", color: "#10b981" },
-  ADMIN: { accent: "#c084fc", label: "Admin Portal", color: "#8b5cf6" },
+  STUDENT: { accent: "#818cf8", label: "Student", color: "#6366f1" },
+  FACULTY: { accent: "#34d399", label: "Faculty", color: "#10b981" },
+  ADMIN: { accent: "#c084fc", label: "Admin", color: "#8b5cf6" },
 };
 
 export default function Sidebar() {

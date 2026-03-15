@@ -18,7 +18,23 @@ export function AuthProvider({ children }) {
       return null;
     }
   });
-  const [token, setToken] = useState(() => localStorage.getItem("token"));
+  const [token, setToken] = useState(() => {
+    const t = localStorage.getItem("token");
+    if (!t) return null;
+    // Check if JWT is expired before restoring session
+    try {
+      const payload = JSON.parse(atob(t.split(".")[1]));
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        return null;
+      }
+    } catch {
+      /* malformed token — clear it */ localStorage.removeItem("token");
+      return null;
+    }
+    return t;
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 

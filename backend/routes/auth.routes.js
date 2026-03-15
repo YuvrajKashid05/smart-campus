@@ -4,6 +4,7 @@ import { requireAuth } from "../middlewares/auth.middleware.js";
 
 const router = Router();
 
+//Auth routes
 router.post("/register", register);
 router.post("/login", login);
 router.post("/logout", requireAuth, logout);

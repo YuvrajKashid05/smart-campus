@@ -6,6 +6,19 @@ import Complaint from "../models/complaint.model.js";
 import Notice from "../models/notice.model.js";
 import User from "../models/user.model.js";
 
+// ── Sanitize user input before sending to Gemini ─────────────────────
+// Strips prompt injection attempts like "Ignore previous instructions"
+function sanitizeAIInput(str = "", maxLen = 500) {
+  if (typeof str !== "string") return "";
+  return str
+    .slice(0, maxLen)
+    .replace(/ignore\s+(all\s+)?(previous|above|prior)\s+instructions?/gi, "[removed]")
+    .replace(/system\s*prompt/gi, "[removed]")
+    .replace(/you\s+are\s+now/gi, "[removed]")
+    .replace(/jailbreak/gi, "[removed]")
+    .trim();
+}
+
 function requireKey(res) {
   if (!process.env.GEMINI_API_KEY) {
     res.status(503).json({ ok: false, error: "GEMINI_API_KEY not set in .env" });
@@ -26,8 +39,9 @@ async function gemini(prompt) {
 export async function generateNotice(req, res) {
   try {
     if (!requireKey(res)) return;
-    const { topic, audience = "ALL" } = req.body;
-    if (!topic?.trim()) return res.status(400).json({ ok: false, error: "Topic is required" });
+    const { audience = "ALL" } = req.body;
+    const topic = sanitizeAIInput(req.body.topic);
+    if (!topic) return res.status(400).json({ ok: false, error: "Topic is required" });
 
     const prompt = `You are a college administrative officer. Write a professional, formal college notice.
 Topic: "${topic}"
@@ -52,8 +66,9 @@ Write only the notice body text, nothing else.`;
 export async function generateAnnouncement(req, res) {
   try {
     if (!requireKey(res)) return;
-    const { topic, audience = "ALL", dept = "" } = req.body;
-    if (!topic?.trim()) return res.status(400).json({ ok: false, error: "Topic is required" });
+    const { audience = "ALL", dept = "" } = req.body;
+    const topic = sanitizeAIInput(req.body.topic);
+    if (!topic) return res.status(400).json({ ok: false, error: "Topic is required" });
 
     const prompt = `You are a college faculty member writing an announcement.
 Topic: "${topic}"
@@ -77,8 +92,9 @@ Write only the announcement text, nothing else.`;
 export async function analyzeComplaint(req, res) {
   try {
     if (!requireKey(res)) return;
-    const { message, category } = req.body;
-    if (!message?.trim()) return res.status(400).json({ ok: false, error: "Complaint message required" });
+    const { category } = req.body;
+    const message = sanitizeAIInput(req.body.message, 1000);
+    if (!message) return res.status(400).json({ ok: false, error: "Complaint message required" });
 
     const prompt = `Analyze this college campus complaint and respond ONLY with valid JSON (no markdown, no explanation):
 Category: ${category || "OTHER"}
@@ -197,15 +213,15 @@ export async function weeklyReport(req, res) {
     };
 
     const prompt = `You are a college administrator. Write a concise weekly campus health report.
-Data: ${JSON.stringify(stats)}
+                    Data: ${JSON.stringify(stats)}
 
-Write a professional executive summary in 3-4 short paragraphs covering:
-1. Overall campus activity this week
-2. Complaint status and resolution health
-3. Communication activity (notices/announcements)
-4. One key recommendation
+                    Write a professional executive summary in 3-4 short paragraphs covering:
+                    1. Overall campus activity this week
+                    2. Complaint status and resolution health
+                    3. Communication activity (notices/announcements)
+                    4. One key recommendation
 
-Keep it professional and actionable. Under 200 words.`;
+                    Keep it professional and actionable. Under 200 words.`;
 
     const summary = await gemini(prompt);
     return res.json({ ok: true, stats, summary: summary.trim() });
@@ -215,12 +231,13 @@ Keep it professional and actionable. Under 200 words.`;
   }
 }
 
-// ── 6. Study Help ──────────────────────────────────────────────────────
+// ── 6. Study Help ──
 export async function studyHelp(req, res) {
   try {
     if (!requireKey(res)) return;
-    const { question, subject } = req.body;
-    if (!question?.trim()) return res.status(400).json({ ok: false, error: "Question is required" });
+    const subject = sanitizeAIInput(req.body.subject || "", 100);
+    const question = sanitizeAIInput(req.body.question);
+    if (!question) return res.status(400).json({ ok: false, error: "Question is required" });
 
     const prompt = `You are a helpful academic tutor for college students.
 ${subject ? `Subject context: ${subject}` : ""}
@@ -238,7 +255,7 @@ Maximum 200 words.`;
   }
 }
 
-// ── Legacy ask endpoint ───────────────────────────────────────────────
+// ── Legacy ask endpoint ───
 export async function ask(req, res) {
   const { question } = req.body;
   if (!question?.trim()) return res.status(400).json({ ok: false, error: "Question required" });

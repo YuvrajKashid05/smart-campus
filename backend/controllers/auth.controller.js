@@ -24,20 +24,23 @@ const buildUserResponse = (user) => ({
 
 const registerSchema = z
   .object({
-    name: z.string().trim().min(2, "Full name must be at least 2 characters"),
+    name: z.string().trim().min(2, "Full name must be at least 2 characters").max(80, "Name too long"),
 
     // Zod 4 style: avoid z.string().email()
-    email: z.string().trim().pipe(z.email("Invalid email")),
+    email: z.string().trim().max(120, "Email too long").pipe(z.email("Invalid email")),
 
-    password: z.string().min(6, "Password must be at least 6 characters"),
-    role: z.enum(["STUDENT", "FACULTY", "ADMIN"]).default("STUDENT"),
+    // Min 8 chars, max 72 (bcrypt limit)
+    password: z.string().min(8, "Password must be at least 8 characters").max(72, "Password too long"),
 
-    mobileNumber: z.string().trim().optional(),
-    dept: z.string().trim().optional(),
-    section: z.string().trim().optional(),
+    // SECURITY: ADMIN cannot self-register — must be created by existing admin
+    role: z.enum(["STUDENT", "FACULTY"]).default("STUDENT"),
+
+    mobileNumber: z.string().trim().max(15).optional(),
+    dept: z.string().trim().max(20).optional(),
+    section: z.string().trim().max(5).optional(),
     semester: z.coerce.number().int().min(1).max(8).optional(),
-    rollNo: z.string().trim().optional(),
-    employeeId: z.string().trim().optional(),
+    rollNo: z.string().trim().max(30).optional(),
+    employeeId: z.string().trim().max(30).optional(),
   })
   .superRefine((data, ctx) => {
     if (data.role === "STUDENT") {

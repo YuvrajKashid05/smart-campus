@@ -83,8 +83,15 @@ async function buildContext(user, intent) {
 
 export async function chatWithCampusBot(req, res) {
   try {
-    const { message, history = [] } = req.body;
-    if (!message?.trim()) return res.status(400).json({ ok: false, error: "Message is required" });
+    const rawMessage = req.body.message;
+    const rawHistory = Array.isArray(req.body.history) ? req.body.history : [];
+
+    // Sanitize + cap inputs
+    const message = typeof rawMessage === "string" ? rawMessage.slice(0, 500).replace(/ignore\s+(all\s+)?(previous|prior)\s+instructions?/gi, "[removed]").trim() : "";
+    if (!message) return res.status(400).json({ ok: false, error: "Message is required" });
+
+    // Cap history at 10 messages, each max 300 chars
+    const history = rawHistory.slice(-10).map(h => ({ role: h.role, text: String(h.text || "").slice(0, 300) }));
 
     if (!process.env.GEMINI_API_KEY) {
       return res.status(503).json({ ok: false, error: "AI not configured. Add GEMINI_API_KEY to .env" });
@@ -98,18 +105,19 @@ export async function chatWithCampusBot(req, res) {
 
     // Build multi-turn conversation
     const systemPrompt = `You are Smart Campus AI — a helpful, friendly academic assistant for a college campus management system.
-Rules:
-1. Use the provided campus context when answering campus-related questions.
-2. Never reveal unauthorized or confidential information.
-3. For study questions, be a helpful tutor — explain clearly with examples.
-4. Keep answers concise and well-formatted (use bullet points where helpful).
-5. Remember the conversation history to give contextual follow-up answers.
-User: ${user.name} | Role: ${user.role} | Dept: ${user.dept || "N/A"}
-Intent: ${intent}
-Campus Data: ${JSON.stringify(context)}`;
+                            Rules:
+                            1. Use the provided campus context when answering campus-related questions.
+                            2. Never reveal unauthorized or confidential information.
+                            3. For study questions, be a helpful tutor — explain clearly with examples.
+                            4. Keep answers concise and well-formatted (use bullet points where helpful).
+                            5. Remember the conversation history to give contextual follow-up answers.
+                            User: ${user.name} | Role: ${user.role} | Dept: ${user.dept || "N/A"}
+                            Intent: ${intent}
+                            Campus Data: ${JSON.stringify(context)}`;
 
     // Multi-turn: combine history + new message
     const conversationHistory = history.slice(-8).map(h => `${h.role === "user" ? "User" : "Assistant"}: ${h.text}`).join("\n");
+
     const fullPrompt = conversationHistory
       ? `${systemPrompt}\n\nConversation so far:\n${conversationHistory}\n\nUser: ${message}\nAssistant:`
       : `${systemPrompt}\n\nUser: ${message}\nAssistant:`;
@@ -121,6 +129,7 @@ Campus Data: ${JSON.stringify(context)}`;
 
     const answer = result?.text || result?.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I could not generate an answer.";
     return res.json({ ok: true, intent, contextType: context.type, answer });
+    
   } catch (error) {
     console.error("CHATBOT ERROR:", error?.message || error);
     return res.status(500).json({ ok: false, error: error?.message || "Failed to get chatbot response" });
