@@ -8,14 +8,14 @@ import User from "../models/user.model.js";
 
 function detectIntent(message = "") {
   const t = message.toLowerCase();
-  if (t.includes("attendance")) return "attendance";
-  if (t.includes("timetable") || t.includes("schedule") || t.includes("class") || t.includes("lecture")) return "timetable";
+  if (t.includes("attendance") || t.includes("present") || t.includes("absent")) return "attendance";
+  if (t.includes("timetable") || t.includes("schedule") || t.includes("class") || t.includes("lecture") || t.includes("today")) return "timetable";
   if (t.includes("notice")) return "notices";
   if (t.includes("announcement")) return "announcements";
   if (t.includes("complaint")) return "complaints";
-  if (t.includes("profile") || t.includes("my detail") || t.includes("my info")) return "profile";
+  if (t.includes("profile") || t.includes("my detail") || t.includes("my info") || t.includes("who am i")) return "profile";
   if (t.includes("defaulter")) return "defaulters";
-  if (t.includes("student list") || t.includes("all users") || t.includes("user list")) return "users";
+  if (t.includes("explain") || t.includes("what is") || t.includes("how does") || t.includes("help me understand") || t.includes("teach") || t.includes("study")) return "study_help";
   return "general";
 }
 
@@ -23,142 +23,71 @@ async function buildContext(user, intent) {
   const role = user.role;
 
   if (intent === "profile") {
-    return {
-      type: "profile",
-      data: {
-        name: user.name, email: user.email, role: user.role,
-        mobile: user.mobileNumber, dept: user.dept,
-        semester: user.semester, section: user.section,
-        rollNo: user.rollNo, employeeId: user.employeeId,
-        isActive: user.isActive,
-      },
-    };
+    return { type: "profile", data: { name: user.name, email: user.email, role: user.role, mobile: user.mobileNumber, dept: user.dept, semester: user.semester, section: user.section, rollNo: user.rollNo, employeeId: user.employeeId } };
   }
 
   if (intent === "attendance") {
     if (role === "STUDENT") {
-      const records = await AttendanceRecord.find({ student: user._id })
-        .populate("session", "course dept section semester createdAt")
-        .sort({ markedAt: -1 })
-        .limit(20);
-      return {
-        type: "attendance",
-        data: {
-          totalMarked: records.length,
-          records: records.map(r => ({
-            course: r.session?.course || "",
-            dept: r.session?.dept || "",
-            markedAt: r.markedAt,
-          })),
-        },
-      };
+      const records = await AttendanceRecord.find({ student: user._id }).populate("session", "course dept section semester createdAt").sort({ markedAt: -1 }).limit(20);
+      return { type: "attendance", data: { totalMarked: records.length, records: records.map(r => ({ course: r.session?.course || "", dept: r.session?.dept || "", markedAt: r.markedAt })) } };
     }
     return { type: "attendance", data: "Only personal attendance available." };
   }
 
   if (intent === "timetable") {
     if (role === "STUDENT") {
-      const timetables = await Timetable.find({
-        dept: user.dept, semester: user.semester, section: user.section,
-      }).populate("faculty", "name").sort({ day: 1, startTime: 1 });
-      return {
-        type: "timetable",
-        data: timetables.map(t => ({
-          day: t.day, title: t.title, subject: t.subject,
-          room: t.room, startTime: t.startTime, endTime: t.endTime,
-          faculty: t.faculty?.name || "",
-        })),
-      };
+      const timetables = await Timetable.find({ dept: user.dept, semester: user.semester, section: user.section }).populate("faculty", "name").sort({ day: 1, startTime: 1 });
+      return { type: "timetable", data: timetables.map(t => ({ day: t.day, title: t.title, subject: t.subject, room: t.room, startTime: t.startTime, endTime: t.endTime, faculty: t.faculty?.name || "" })) };
     }
     if (role === "FACULTY") {
-      const timetables = await Timetable.find({ faculty: user._id })
-        .sort({ day: 1, startTime: 1 });
-      return {
-        type: "timetable",
-        data: timetables.map(t => ({
-          day: t.day, title: t.title, dept: t.dept,
-          semester: t.semester, section: t.section,
-          room: t.room, startTime: t.startTime, endTime: t.endTime,
-        })),
-      };
+      const timetables = await Timetable.find({ faculty: user._id }).sort({ day: 1, startTime: 1 });
+      return { type: "timetable", data: timetables.map(t => ({ day: t.day, title: t.title, dept: t.dept, semester: t.semester, section: t.section, room: t.room, startTime: t.startTime, endTime: t.endTime })) };
     }
     const timetables = await Timetable.find({}).limit(30).sort({ day: 1, startTime: 1 });
     return { type: "timetable", data: timetables };
   }
 
   if (intent === "notices") {
-    const notices = await Notice.find({})
-      .sort({ createdAt: -1 }).limit(10).populate("createdBy", "name");
-    return {
-      type: "notices",
-      data: notices.map(n => ({
-        title: n.title, body: n.body, audience: n.audience,
-        createdAt: n.createdAt, by: n.createdBy?.name || "",
-      })),
-    };
+    const notices = await Notice.find({}).sort({ createdAt: -1 }).limit(10).populate("createdBy", "name");
+    return { type: "notices", data: notices.map(n => ({ title: n.title, body: n.body, audience: n.audience, createdAt: n.createdAt, by: n.createdBy?.name || "" })) };
   }
 
   if (intent === "announcements") {
-    const items = await Announcement.find({})
-      .sort({ createdAt: -1 }).limit(10).populate("createdBy", "name");
-    return {
-      type: "announcements",
-      data: items.map(a => ({
-        title: a.title, message: a.message, audience: a.audience,
-        dept: a.dept, semester: a.semester, section: a.section,
-        createdAt: a.createdAt, by: a.createdBy?.name || "",
-      })),
-    };
+    const items = await Announcement.find({}).sort({ createdAt: -1 }).limit(10).populate("createdBy", "name");
+    return { type: "announcements", data: items.map(a => ({ title: a.title, message: a.message, audience: a.audience, dept: a.dept, createdAt: a.createdAt, by: a.createdBy?.name || "" })) };
   }
 
   if (intent === "complaints") {
     if (role === "STUDENT") {
-      const complaints = await Complaint.find({ createdBy: user._id })
-        .sort({ createdAt: -1 }).limit(10);
-      return {
-        type: "complaints",
-        data: complaints.map(c => ({
-          category: c.category, message: c.message,
-          status: c.status, createdAt: c.createdAt,
-        })),
-      };
+      const complaints = await Complaint.find({ createdBy: user._id }).sort({ createdAt: -1 }).limit(10);
+      return { type: "complaints", data: complaints.map(c => ({ category: c.category, message: c.message, status: c.status, createdAt: c.createdAt })) };
     }
     if (role === "ADMIN") {
-      const complaints = await Complaint.find({})
-        .sort({ createdAt: -1 }).limit(15)
-        .populate("createdBy", "name role dept");
+      const complaints = await Complaint.find({}).sort({ createdAt: -1 }).limit(15).populate("createdBy", "name role dept");
       return { type: "complaints", data: complaints };
     }
     return { type: "complaints", data: "No complaint access for your role." };
   }
 
-  if (intent === "users") {
-    if (role !== "ADMIN" && role !== "FACULTY") {
-      return { type: "users", data: "You do not have permission to access user lists." };
+  if (intent === "study_help") {
+    // Get student's subjects for context
+    if (role === "STUDENT") {
+      const timetables = await Timetable.find({ dept: user.dept, semester: user.semester, section: user.section }).distinct("title");
+      return { type: "study_help", data: { subjects: timetables, dept: user.dept, semester: user.semester } };
     }
-    const users = await User.find({})
-      .select("name email role dept semester section isActive").limit(20);
-    return { type: "users", data: users };
+    return { type: "study_help", data: "General academic assistant mode." };
   }
 
-  return {
-    type: "general",
-    data: "Answer general study/campus questions briefly and safely.",
-  };
+  return { type: "general", data: "Answer general study/campus questions briefly and safely." };
 }
 
 export async function chatWithCampusBot(req, res) {
   try {
-    const { message } = req.body;
-    if (!message?.trim()) {
-      return res.status(400).json({ ok: false, error: "Message is required" });
-    }
+    const { message, history = [] } = req.body;
+    if (!message?.trim()) return res.status(400).json({ ok: false, error: "Message is required" });
 
     if (!process.env.GEMINI_API_KEY) {
-      return res.status(503).json({
-        ok: false,
-        error: "AI is not configured. Add GEMINI_API_KEY to your .env file.",
-      });
+      return res.status(503).json({ ok: false, error: "AI not configured. Add GEMINI_API_KEY to .env" });
     }
 
     const user = await User.findById(req.user._id);
@@ -167,38 +96,33 @@ export async function chatWithCampusBot(req, res) {
     const intent = detectIntent(message);
     const context = await buildContext(user, intent);
 
-    const prompt = `You are Smart Campus AI Assistant — a helpful, friendly academic assistant.
-
+    // Build multi-turn conversation
+    const systemPrompt = `You are Smart Campus AI — a helpful, friendly academic assistant for a college campus management system.
 Rules:
-1. Answer ONLY using the provided campus context when campus data is available.
-2. Never reveal confidential or unauthorized information.
-3. If the user asks for restricted data, clearly refuse.
-4. For general study questions with no campus data needed, answer briefly.
-5. Keep answers concise, clear and role-appropriate.
-6. Format nicely — use bullet points or short paragraphs where helpful.
+1. Use the provided campus context when answering campus-related questions.
+2. Never reveal unauthorized or confidential information.
+3. For study questions, be a helpful tutor — explain clearly with examples.
+4. Keep answers concise and well-formatted (use bullet points where helpful).
+5. Remember the conversation history to give contextual follow-up answers.
+User: ${user.name} | Role: ${user.role} | Dept: ${user.dept || "N/A"}
+Intent: ${intent}
+Campus Data: ${JSON.stringify(context)}`;
 
-User Role: ${user.role}
-User Name: ${user.name}
-Detected Intent: ${intent}
-User Message: ${message}
-
-Campus Context:
-${JSON.stringify(context, null, 2)}`;
+    // Multi-turn: combine history + new message
+    const conversationHistory = history.slice(-8).map(h => `${h.role === "user" ? "User" : "Assistant"}: ${h.text}`).join("\n");
+    const fullPrompt = conversationHistory
+      ? `${systemPrompt}\n\nConversation so far:\n${conversationHistory}\n\nUser: ${message}\nAssistant:`
+      : `${systemPrompt}\n\nUser: ${message}\nAssistant:`;
 
     const result = await ai.models.generateContent({
       model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
-      contents: prompt,
+      contents: fullPrompt,
     });
 
-    // @google/genai v1.x — response.text is a direct string property
     const answer = result?.text || result?.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I could not generate an answer.";
-
     return res.json({ ok: true, intent, contextType: context.type, answer });
   } catch (error) {
     console.error("CHATBOT ERROR:", error?.message || error);
-    return res.status(500).json({
-      ok: false,
-      error: error?.message || "Failed to get chatbot response",
-    });
+    return res.status(500).json({ ok: false, error: error?.message || "Failed to get chatbot response" });
   }
 }

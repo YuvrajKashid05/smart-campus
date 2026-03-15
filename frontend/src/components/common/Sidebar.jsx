@@ -1,6 +1,7 @@
 import { useContext, useMemo, useState } from "react";
 import {
   MdAnalytics,
+  MdAutoAwesome,
   MdBarChart,
   MdCalendarMonth,
   MdCampaign,
@@ -9,6 +10,7 @@ import {
   MdDashboard,
   MdDescription,
   MdGroup,
+  MdLocationOn,
   MdLogout,
   MdMenu,
   MdMessage,
@@ -37,9 +39,11 @@ const navByRole = {
     ["Defaulter List", "/faculty/defaulters", MdWarning],
     ["Student Records", "/faculty/student-records", MdGroup],
     ["Timetable", "/faculty/timetable", MdCalendarMonth],
-    ["MyTimetable", "/faculty/my-timetable", MdSchedule],
+    ["My Timetable", "/faculty/my-timetable", MdSchedule],
     ["Create Notice", "/faculty/notice", MdDescription],
     ["Announcement", "/faculty/announcement", MdCampaign],
+    ["AI Risk Report", "/faculty/ai-risk-report", MdAutoAwesome],
+    ["Fraud Report", "/faculty/fraud-report", MdLocationOn],
   ],
   ADMIN: [
     ["Dashboard", "/admin/dashboard", MdDashboard],
@@ -48,152 +52,153 @@ const navByRole = {
     ["Notices", "/admin/notices", MdDescription],
     ["Announcements", "/admin/announcements", MdCampaign],
     ["Reports", "/admin/reports", MdAnalytics],
+    ["AI Report", "/admin/ai-report", MdAutoAwesome],
     ["Settings", "/admin/settings", MdSettings],
   ],
 };
 
-const roleMeta = {
-  STUDENT: {
-    label: "Student Portal",
-    accent: "bg-indigo-600",
-    soft: "bg-indigo-50 text-indigo-700",
-  },
-  FACULTY: {
-    label: "Faculty Portal",
-    accent: "bg-emerald-600",
-    soft: "bg-emerald-50 text-emerald-700",
-  },
-  ADMIN: {
-    label: "Admin Portal",
-    accent: "bg-violet-600",
-    soft: "bg-violet-50 text-violet-700",
-  },
+const ROLE_META = {
+  STUDENT: { accent: "#818cf8", label: "Student Portal", color: "#6366f1" },
+  FACULTY: { accent: "#34d399", label: "Faculty Portal", color: "#10b981" },
+  ADMIN: { accent: "#c084fc", label: "Admin Portal", color: "#8b5cf6" },
 };
 
-function SidebarContent({ onNavigate }) {
-  const { user, logout } = useContext(AuthContext);
+export default function Sidebar() {
+  const { user, isAuthenticated, logout } = useContext(AuthContext);
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
-  const items = useMemo(
+  if (!isAuthenticated) return null;
+
+  const nav = useMemo(
     () => navByRole[user?.role] || navByRole.STUDENT,
     [user?.role],
   );
-  const meta = roleMeta[user?.role] || roleMeta.STUDENT;
+  const meta = ROLE_META[user?.role] || ROLE_META.STUDENT;
 
-  const handleLogout = async () => {
-    await logout();
+  const handleLogout = () => {
+    logout();
     navigate("/");
   };
 
-  return (
-    <div className="h-full flex flex-col bg-white border-r border-slate-200 shadow-sm">
-      <div className="px-5 py-5 border-b border-slate-100">
-        <div className="flex items-center gap-3">
-          <div
-            className={`h-11 w-11 rounded-2xl ${meta.accent} text-white grid place-items-center font-black text-lg`}
-          >
-            SC
-          </div>
-          <div>
-            <p className="font-bold text-slate-900 leading-tight">
-              Smart Campus
-            </p>
-            <p
-              className={`text-xs font-semibold mt-1 inline-flex px-2 py-0.5 rounded-full ${meta.soft}`}
-            >
-              {meta.label}
-            </p>
-          </div>
+  const Content = () => (
+    <div className="flex flex-col h-full" style={{ background: "#0f172a" }}>
+      {/* Logo */}
+      <div className="flex items-center gap-3 px-5 py-4.5 border-b border-white/6">
+        <div
+          className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+          style={{
+            background: `linear-gradient(135deg, ${meta.color}, ${meta.color}cc)`,
+          }}
+        >
+          <MdDashboard size={16} className="text-white" />
         </div>
-      </div>
-
-      <div className="px-3 py-4 flex-1 overflow-y-auto">
-        <nav className="space-y-1">
-          {items.map(([label, path, Icon]) => {
-            const active = pathname === path;
-            return (
-              <Link
-                key={path}
-                to={path}
-                onClick={onNavigate}
-                className={[
-                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition",
-                  active
-                    ? "bg-slate-900 text-white shadow-sm"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-                ].join(" ")}
-              >
-                <Icon size={18} />
-                <span>{label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-      </div>
-
-      <div className="p-4 border-t border-slate-100">
-        <div className="rounded-2xl bg-slate-50 border border-slate-200 p-3">
-          <p className="font-semibold text-slate-900 text-sm truncate">
-            {user?.name || "User"}
+        <div className="flex-1 min-w-0">
+          <p className="text-white font-bold text-sm leading-none">
+            Smart Campus
           </p>
-          <p className="text-xs text-slate-500 truncate mt-0.5">
-            {user?.email || ""}
-          </p>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 px-3 py-2 text-sm font-semibold transition"
+          <p
+            className="text-[11px] mt-0.5 font-medium"
+            style={{ color: meta.accent }}
           >
-            <MdLogout size={18} />
-            Logout
+            {meta.label}
+          </p>
+        </div>
+        <button
+          onClick={() => setMobileOpen(false)}
+          className="lg:hidden text-slate-500 hover:text-slate-300"
+        >
+          <MdClose size={18} />
+        </button>
+      </div>
+
+      {/* Nav */}
+      <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
+        {nav.map(([label, path, Icon]) => {
+          const active = pathname === path;
+          return (
+            <Link
+              key={path}
+              to={path}
+              onClick={() => setMobileOpen(false)}
+              style={
+                active
+                  ? {
+                      color: meta.accent,
+                      background: `${meta.color}1a`,
+                      borderLeft: `2px solid ${meta.color}`,
+                    }
+                  : {}
+              }
+              className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all
+                ${active ? "" : "text-slate-400 hover:text-slate-200 hover:bg-white/4 border-l-2 border-transparent"}`}
+            >
+              <Icon size={17} className="shrink-0" />
+              <span>{label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* User footer */}
+      <div className="px-3 pb-4 border-t border-white/6 pt-3">
+        <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/4">
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+            style={{
+              background: `linear-gradient(135deg, ${meta.color}, ${meta.color}bb)`,
+            }}
+          >
+            {user?.name?.charAt(0)?.toUpperCase()}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-slate-200 text-xs font-semibold truncate leading-tight">
+              {user?.name}
+            </p>
+            <p className="text-slate-500 text-[11px] truncate">{user?.email}</p>
+          </div>
+          <button
+            onClick={handleLogout}
+            title="Logout"
+            className="text-slate-500 hover:text-red-400 transition shrink-0 p-1 rounded-lg hover:bg-white/5"
+          >
+            <MdLogout size={16} />
           </button>
         </div>
       </div>
     </div>
   );
-}
-
-export default function Sidebar() {
-  const { isAuthenticated } = useContext(AuthContext);
-  const [open, setOpen] = useState(false);
-
-  if (!isAuthenticated) return null;
 
   return (
     <>
+      {/* Mobile hamburger */}
       <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="lg:hidden fixed top-4 left-4 z-40 h-10 w-10 rounded-xl bg-white border border-slate-200 shadow-sm grid place-items-center"
+        onClick={() => setMobileOpen(true)}
+        className="lg:hidden fixed top-4 left-4 z-40 w-9 h-9 flex items-center justify-center rounded-xl shadow-lg text-slate-700 bg-white border border-slate-200"
       >
-        <MdMenu size={22} />
+        <MdMenu size={18} />
       </button>
 
-      {open && (
-        <>
-          <div
-            className="lg:hidden fixed inset-0 z-40 bg-slate-900/40"
-            onClick={() => setOpen(false)}
-          />
-          <aside className="lg:hidden fixed left-0 top-0 z-50 h-full w-72">
-            <div className="absolute right-3 top-3 z-10">
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="h-9 w-9 rounded-xl bg-white/90 border border-slate-200 grid place-items-center"
-              >
-                <MdClose size={20} />
-              </button>
-            </div>
-            <SidebarContent onNavigate={() => setOpen(false)} />
-          </aside>
-        </>
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+          onClick={() => setMobileOpen(false)}
+        />
       )}
 
-      <aside className="hidden lg:block fixed left-0 top-0 h-screen w-64 z-30">
-        <SidebarContent />
-      </aside>
+      {/* Mobile drawer */}
+      <div
+        className={`lg:hidden fixed top-0 left-0 h-full w-64 z-50 transition-transform duration-300 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
+      >
+        <Content />
+      </div>
+
+      {/* Desktop sidebar */}
+      <div className="hidden lg:flex lg:flex-col fixed top-0 left-0 h-full w-64 z-30">
+        <Content />
+      </div>
     </>
   );
 }

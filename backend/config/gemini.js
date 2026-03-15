@@ -1,13 +1,16 @@
 import { GoogleGenAI } from "@google/genai";
-import { configDotenv } from "dotenv";
-configDotenv();
 
-if (!process.env.GEMINI_API_KEY) {
-  console.warn("GEMINI_API_KEY is not set. Chatbot requests will fail until you add it to your environment.");
+// Factory — creates client at call time so dotenv is always loaded first
+export function getAI() {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error("GEMINI_API_KEY not set");
+  return new GoogleGenAI({ apiKey: key });
 }
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-});
-
+// Default export for backward compatibility
+const ai = {
+  models: {
+    generateContent: (opts) => getAI().models.generateContent(opts),
+  },
+};
 export default ai;

@@ -1,6 +1,6 @@
 import api from "./api";
 
-export async function askCampusBot(message) {
-  const { data } = await api.post("/chatbot/chat", { message });
+export async function askCampusBot(message, history = []) {
+  const { data } = await api.post("/chatbot/chat", { message, history });
   return data;
 }

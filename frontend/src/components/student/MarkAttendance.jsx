@@ -3,20 +3,69 @@ import {
   MdCameraAlt,
   MdCheckCircle,
   MdInfo,
+  MdLocationOff,
+  MdLocationOn,
   MdQrCode2,
   MdWarning,
 } from "react-icons/md";
 import * as attendanceService from "../../services/attendance";
 import { Alert, PAGE } from "../../ui";
 
-function extractToken(value) {
-  if (!value) return "";
-  const raw = String(value).trim();
-  if (!raw) return "";
-
+// ── Device fingerprint — browser APIs, no library needed ──────────────
+function getDeviceFingerprint() {
   try {
-    const parsed = JSON.parse(raw);
-    return parsed?.qrToken || parsed?.token || parsed?.sessionId || raw;
+    const parts = [
+      navigator.userAgent,
+      screen.width + "x" + screen.height,
+      screen.colorDepth,
+      navigator.language,
+      navigator.hardwareConcurrency || "",
+      navigator.deviceMemory || "",
+      new Date().getTimezoneOffset(),
+    ];
+    // Simple hash
+    const str = parts.join("|");
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash << 5) - hash + str.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash).toString(36);
+  } catch {
+    return null;
+  }
+}
+
+function getDeviceInfo() {
+  try {
+    const ua = navigator.userAgent;
+    const mobile = /mobile/i.test(ua);
+    const os = /android/i.test(ua)
+      ? "Android"
+      : /iphone|ipad/i.test(ua)
+        ? "iOS"
+        : /windows/i.test(ua)
+          ? "Windows"
+          : "Other";
+    const browser = /chrome/i.test(ua)
+      ? "Chrome"
+      : /firefox/i.test(ua)
+        ? "Firefox"
+        : /safari/i.test(ua)
+          ? "Safari"
+          : "Other";
+    return `${os} ${mobile ? "Mobile" : "Desktop"} · ${browser} · ${screen.width}x${screen.height}`;
+  } catch {
+    return null;
+  }
+}
+
+function extractToken(v) {
+  if (!v) return "";
+  const raw = String(v).trim();
+  try {
+    const p = JSON.parse(raw);
+    return p?.qrToken || p?.token || p?.sessionId || raw;
   } catch {
     return raw;
   }
@@ -27,14 +76,45 @@ export default function MarkAttendance() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [fraudWarning, setFraudWarning] = useState("");
   const [cameraActive, setCameraActive] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [detected, setDetected] = useState(false);
+
+  // GPS
+  const [gpsLat, setGpsLat] = useState(null);
+  const [gpsLng, setGpsLng] = useState(null);
+  const [gpsStatus, setGpsStatus] = useState("idle"); // idle|loading|ok|denied|unavailable
+
+  // Device
+  const fingerprint = useRef(getDeviceFingerprint());
+  const deviceInfo = useRef(getDeviceInfo());
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const rafRef = useRef(null);
+
+  const requestGPS = () => {
+    if (!navigator.geolocation) {
+      setGpsStatus("unavailable");
+      return;
+    }
+    setGpsStatus("loading");
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        setGpsLat(p.coords.latitude);
+        setGpsLng(p.coords.longitude);
+        setGpsStatus("ok");
+      },
+      () => setGpsStatus("denied"),
+      { enableHighAccuracy: true, timeout: 8000 },
+    );
+  };
+
+  useEffect(() => {
+    requestGPS();
+  }, []);
 
   const stopCamera = () => {
     setScanning(false);
@@ -45,34 +125,47 @@ export default function MarkAttendance() {
       rafRef.current = null;
     }
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
+    if (videoRef.current) videoRef.current.srcObject = null;
   };
 
   const handleMark = async (value) => {
     const token = extractToken(value);
     if (!token) {
-      setError("Invalid token. Please scan again or paste the token manually.");
+      setError("Invalid token. Scan again or paste manually.");
       return;
     }
-
     setLoading(true);
     setError("");
     setSuccess("");
-
+    setFraudWarning("");
     try {
-      const res = await attendanceService.markAttendance(token);
-      if (!res?.ok) {
-        throw new Error(res?.error || "Failed to mark attendance.");
-      }
+      const res = await attendanceService.markAttendance(
+        token,
+        gpsStatus === "ok" ? gpsLat : null,
+        gpsStatus === "ok" ? gpsLng : null,
+        fingerprint.current,
+        deviceInfo.current,
+      );
+      if (!res?.ok) throw new Error(res?.error || "Failed to mark attendance.");
+
+      let warning = "";
+      if (res.proxyFlagged)
+        warning =
+          "⚠️ This device was already used by another student. This has been flagged as possible proxy attendance.";
+      else if (res.locationFlagged && res.distanceMeters)
+        warning = `⚠️ You are ${res.distanceMeters}m from the classroom. This has been flagged and your teacher notified.`;
+      else if (res.locationFlagged)
+        warning =
+          "⚠️ Your location could not be verified. This has been flagged.";
+
+      if (warning) setFraudWarning(warning);
       setSuccess(
         res.alreadyMarked
           ? "Attendance already marked for this session."
-          : "Attendance marked successfully.",
+          : "✅ Attendance marked successfully!",
       );
       setQrInput("");
     } catch (err) {
@@ -90,7 +183,8 @@ export default function MarkAttendance() {
     setError("");
     setSuccess("");
     setDetected(false);
-
+    setFraudWarning("");
+    requestGPS();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -99,10 +193,8 @@ export default function MarkAttendance() {
           height: { ideal: 720 },
         },
       });
-
       streamRef.current = stream;
       setCameraActive(true);
-
       setTimeout(() => {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -111,58 +203,39 @@ export default function MarkAttendance() {
         }
       }, 100);
     } catch (err) {
-      if (err?.name === "NotAllowedError") {
-        setError(
-          "Camera permission denied. Allow camera access in browser settings.",
-        );
-      } else if (err?.name === "NotFoundError") {
+      if (err?.name === "NotAllowedError")
+        setError("Camera permission denied.");
+      else if (err?.name === "NotFoundError")
         setError("No camera found on this device.");
-      } else {
-        setError(`Unable to access camera: ${err?.message || "Unknown error"}`);
-      }
+      else
+        setError(
+          "Unable to access camera: " + (err?.message || "Unknown error"),
+        );
     }
   };
 
   useEffect(() => {
-    if (!scanning) return undefined;
-
+    if (!scanning) return;
     let active = true;
-
-    const runScan = async () => {
+    const run = async () => {
       try {
         const jsQR = (await import("jsqr")).default;
-
         const tick = () => {
           if (!active) return;
-
-          const video = videoRef.current;
-          const canvas = canvasRef.current;
-
-          if (
-            !video ||
-            !canvas ||
-            video.readyState < video.HAVE_ENOUGH_DATA ||
-            video.videoWidth === 0
-          ) {
+          const v = videoRef.current,
+            c = canvasRef.current;
+          if (!v || !c || v.readyState < v.HAVE_ENOUGH_DATA || !v.videoWidth) {
             rafRef.current = requestAnimationFrame(tick);
             return;
           }
-
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-
-          const context = canvas.getContext("2d");
-          context.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imageData = context.getImageData(
-            0,
-            0,
-            canvas.width,
-            canvas.height,
-          );
-          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          c.width = v.videoWidth;
+          c.height = v.videoHeight;
+          const ctx = c.getContext("2d");
+          ctx.drawImage(v, 0, 0, c.width, c.height);
+          const img = ctx.getImageData(0, 0, c.width, c.height);
+          const code = jsQR(img.data, img.width, img.height, {
             inversionAttempts: "dontInvert",
           });
-
           if (code?.data) {
             active = false;
             setDetected(true);
@@ -170,19 +243,15 @@ export default function MarkAttendance() {
             handleMark(code.data);
             return;
           }
-
           rafRef.current = requestAnimationFrame(tick);
         };
-
         rafRef.current = requestAnimationFrame(tick);
       } catch {
         setError("QR scanner failed. Use manual entry below.");
         stopCamera();
       }
     };
-
-    runScan();
-
+    run();
     return () => {
       active = false;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -191,10 +260,46 @@ export default function MarkAttendance() {
 
   useEffect(() => () => stopCamera(), []);
 
-  const handleManualSubmit = (e) => {
-    e.preventDefault();
-    handleMark(qrInput);
-  };
+  const GPS_STYLE = {
+    ok: {
+      bg: "bg-emerald-50 border-emerald-200",
+      text: "text-emerald-700",
+      icon: <MdLocationOn size={15} className="text-emerald-500 shrink-0" />,
+    },
+    loading: {
+      bg: "bg-blue-50 border-blue-200",
+      text: "text-blue-700",
+      icon: (
+        <MdLocationOn
+          size={15}
+          className="text-blue-400 shrink-0 animate-pulse"
+        />
+      ),
+    },
+    denied: {
+      bg: "bg-amber-50 border-amber-200",
+      text: "text-amber-700",
+      icon: <MdLocationOff size={15} className="text-amber-500 shrink-0" />,
+    },
+    unavailable: {
+      bg: "bg-red-50 border-red-200",
+      text: "text-red-700",
+      icon: <MdLocationOff size={15} className="text-red-400 shrink-0" />,
+    },
+    idle: {
+      bg: "bg-slate-50 border-slate-200",
+      text: "text-slate-600",
+      icon: <MdLocationOff size={15} className="text-slate-400 shrink-0" />,
+    },
+  }[gpsStatus];
+
+  const GPS_LABEL = {
+    ok: `GPS ready · ${gpsLat?.toFixed(4)}, ${gpsLng?.toFixed(4)}`,
+    loading: "Getting your location…",
+    denied: "Location access denied — fraud check disabled",
+    unavailable: "GPS unavailable on this device",
+    idle: "Location not yet captured",
+  }[gpsStatus];
 
   return (
     <div className={`${PAGE} fade-up`}>
@@ -202,13 +307,44 @@ export default function MarkAttendance() {
         <div className="mb-6 text-center">
           <h1 className="text-2xl font-bold text-slate-900">Mark Attendance</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Scan the QR shown by your faculty or paste the session token.
+            Scan the QR shown by your faculty. Location and device are verified
+            automatically.
           </p>
+        </div>
+
+        {/* GPS badge */}
+        <div
+          className={`mb-4 flex items-center gap-2.5 p-3 rounded-xl border text-xs font-medium ${GPS_STYLE.bg}`}
+        >
+          {GPS_STYLE.icon}
+          <span className={GPS_STYLE.text}>{GPS_LABEL}</span>
+          {(gpsStatus === "denied" || gpsStatus === "idle") && (
+            <button
+              onClick={requestGPS}
+              className="ml-auto text-indigo-600 font-semibold hover:underline shrink-0"
+            >
+              Retry
+            </button>
+          )}
+        </div>
+
+        {/* Device badge */}
+        <div className="mb-4 flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-500">
+          <span>🔒</span>
+          <span>
+            Device ID:{" "}
+            <span className="font-mono text-slate-700">
+              {fingerprint.current || "N/A"}
+            </span>{" "}
+            · {deviceInfo.current}
+          </span>
         </div>
 
         {loading && (
           <div className="mb-4">
-            <Alert type="info">Marking attendance…</Alert>
+            <Alert type="info">
+              Marking attendance{gpsStatus === "ok" ? " with location" : ""}…
+            </Alert>
           </div>
         )}
         {error && (
@@ -217,8 +353,15 @@ export default function MarkAttendance() {
           </div>
         )}
         {success && (
-          <div className="mb-4">
-            <Alert type="success">{success}</Alert>
+          <div className="mb-4 flex items-center gap-2 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl">
+            <MdCheckCircle size={22} className="text-emerald-500 shrink-0" />
+            <p className="text-emerald-800 text-sm font-semibold">{success}</p>
+          </div>
+        )}
+        {fraudWarning && (
+          <div className="mb-4 flex items-start gap-2.5 p-4 bg-amber-50 border border-amber-300 rounded-2xl">
+            <MdWarning size={20} className="text-amber-500 shrink-0 mt-0.5" />
+            <p className="text-amber-800 text-sm font-medium">{fraudWarning}</p>
           </div>
         )}
 
@@ -232,13 +375,12 @@ export default function MarkAttendance() {
                 Scan QR Code
               </h2>
               <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
-                Camera will auto-detect the QR and mark your attendance
-                instantly.
+                Camera auto-detects the QR. GPS and device ID are captured
+                automatically for fraud detection.
               </p>
               <button
-                type="button"
                 onClick={startCamera}
-                className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-indigo-700"
+                className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white hover:bg-indigo-700 transition"
               >
                 <MdCameraAlt size={18} />
                 Open Camera
@@ -257,15 +399,25 @@ export default function MarkAttendance() {
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                   <div className="h-52 w-52 rounded-2xl border-4 border-indigo-400/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" />
                 </div>
+                <div className="absolute top-3 left-3 flex gap-1.5">
+                  <span
+                    className={`text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 ${gpsStatus === "ok" ? "bg-emerald-500" : "bg-amber-500"} text-white`}
+                  >
+                    <MdLocationOn size={10} />
+                    {gpsStatus === "ok" ? "GPS ✓" : "GPS?"}
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-indigo-500 text-white">
+                    🔒 Device logged
+                  </span>
+                </div>
               </div>
               <div className="mt-3 flex items-center justify-between gap-3">
                 <p className="text-sm text-slate-200">
                   {detected
-                    ? "QR detected"
-                    : "Point your camera at the QR code"}
+                    ? "QR detected — processing…"
+                    : "Point camera at the QR code"}
                 </p>
                 <button
-                  type="button"
                   onClick={stopCamera}
                   className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
                 >
@@ -283,18 +435,24 @@ export default function MarkAttendance() {
             <div className="h-px flex-1 bg-slate-200" />
           </div>
 
-          <form onSubmit={handleManualSubmit} className="space-y-3">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleMark(qrInput);
+            }}
+            className="space-y-3"
+          >
             <textarea
               value={qrInput}
               onChange={(e) => setQrInput(e.target.value)}
-              placeholder="Paste the token or raw QR JSON here…"
+              placeholder="Paste token or raw QR JSON here…"
               rows={4}
               className="w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
             />
             <button
               type="submit"
               disabled={loading || !qrInput.trim()}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50 transition"
             >
               <MdCheckCircle size={17} />
               {loading ? "Processing…" : "Mark Attendance"}
@@ -304,22 +462,13 @@ export default function MarkAttendance() {
           <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4">
             <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-blue-800">
               <MdInfo size={15} />
-              How it works
+              AI Fraud Detection active
             </p>
-            <ol className="list-inside list-decimal space-y-1 text-xs text-blue-700">
-              <li>Teacher generates a QR code in class.</li>
-              <li>Open camera and point it at the QR code.</li>
-              <li>Attendance is marked automatically after detection.</li>
-              <li>If camera fails, paste the token manually.</li>
-            </ol>
-          </div>
-
-          <div className="mt-4 flex items-start gap-2 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-amber-800">
-            <MdWarning size={16} className="mt-0.5 shrink-0 text-amber-500" />
-            <p className="text-xs">
-              QR codes expire when the session ends, so mark attendance as soon
-              as possible.
-            </p>
+            <ul className="space-y-1 text-xs text-blue-700 list-disc list-inside">
+              <li>GPS location verified against classroom coordinates</li>
+              <li>Device fingerprint checked — prevents proxy attendance</li>
+              <li>AI analyzes patterns and alerts your faculty instantly</li>
+            </ul>
           </div>
         </div>
       </div>
