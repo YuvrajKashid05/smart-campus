@@ -116,7 +116,9 @@ export default function MarkAttendance() {
         setGpsLng(longitude);
         setGpsAccuracy(accuracy ?? null);
 
-        if (accuracy != null && accuracy > 35) {
+        // Indoor classrooms often have weaker GPS.
+        // Mark as weak only for very poor accuracy, but do not block attendance.
+        if (accuracy != null && accuracy > 80) {
           setGpsStatus("weak");
           return;
         }
@@ -172,10 +174,14 @@ export default function MarkAttendance() {
       return;
     }
 
-    if (gpsStatus === "weak") {
-      setError("GPS accuracy is low. Move closer to the classroom and retry.");
-      requestGPS();
-      return;
+    let lat = null;
+    let lng = null;
+    let accuracy = null;
+
+    if (gpsStatus === "ok" || gpsStatus === "weak") {
+      lat = gpsLat;
+      lng = gpsLng;
+      accuracy = gpsAccuracy;
     }
 
     setLoading(true);
@@ -183,21 +189,30 @@ export default function MarkAttendance() {
     setSuccess("");
     setFraudWarning("");
 
+    if (gpsStatus === "weak") {
+      setFraudWarning(
+        "⚠️ GPS signal is weak indoors. Attendance will still be verified.",
+      );
+    }
+
     try {
       const response = await attendanceService.markAttendance(
         token,
-        gpsStatus === "ok" ? gpsLat : null,
-        gpsStatus === "ok" ? gpsLng : null,
+        lat,
+        lng,
         fingerprint.current,
         deviceInfo.current,
-        gpsStatus === "ok" ? gpsAccuracy : null,
+        accuracy,
       );
 
       if (!response?.ok) {
         throw new Error(response?.error || "Failed to mark attendance.");
       }
 
-      let warning = "";
+      let warning =
+        gpsStatus === "weak"
+          ? "⚠️ GPS signal was weak indoors, but verification was attempted."
+          : "";
 
       if (response.proxyFlagged) {
         warning =
@@ -367,7 +382,7 @@ export default function MarkAttendance() {
 
   const GPS_LABEL = {
     ok: `GPS ready · ${gpsLat?.toFixed(4)}, ${gpsLng?.toFixed(4)} · ±${Math.round(gpsAccuracy || 0)}m`,
-    weak: `GPS weak · ±${Math.round(gpsAccuracy || 0)}m · move to open area`,
+    weak: `Indoor GPS weak · ±${Math.round(gpsAccuracy || 0)}m · attendance can still work`,
     loading: "Getting your location…",
     denied: "Location access denied",
     unavailable: "GPS unavailable on this device",
@@ -417,7 +432,10 @@ export default function MarkAttendance() {
           <div className="mb-4">
             <Alert type="info">
               Marking attendance
-              {gpsStatus === "ok" ? " with verified location" : ""}…
+              {gpsStatus === "ok" || gpsStatus === "weak"
+                ? " with location verification"
+                : ""}
+              …
             </Alert>
           </div>
         )}
@@ -484,11 +502,19 @@ export default function MarkAttendance() {
                 <div className="absolute left-3 top-3 flex gap-1.5">
                   <span
                     className={`flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold text-white ${
-                      gpsStatus === "ok" ? "bg-emerald-500" : "bg-amber-500"
+                      gpsStatus === "ok"
+                        ? "bg-emerald-500"
+                        : gpsStatus === "weak"
+                          ? "bg-amber-500"
+                          : "bg-slate-500"
                     }`}
                   >
                     <MdLocationOn size={10} />
-                    {gpsStatus === "ok" ? "GPS ✓" : "GPS?"}
+                    {gpsStatus === "ok"
+                      ? "GPS ✓"
+                      : gpsStatus === "weak"
+                        ? "GPS weak"
+                        : "GPS?"}
                   </span>
 
                   <span className="rounded-full bg-indigo-500 px-2 py-1 text-[10px] font-bold text-white">
@@ -553,8 +579,8 @@ export default function MarkAttendance() {
               AI Fraud Detection active
             </p>
             <ul className="list-inside list-disc space-y-1 text-xs text-blue-700">
-              <li>GPS location must match classroom range</li>
-              <li>Low GPS accuracy is rejected</li>
+              <li>GPS location is checked against classroom range</li>
+              <li>Indoor weak GPS is allowed and verified by backend</li>
               <li>Shared-device proxy attendance is flagged</li>
             </ul>
           </div>
