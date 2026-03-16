@@ -38,7 +38,7 @@ const registerSchema = z
 
     password: z
       .string()
-      .min(8, "Password must be at least 8 characters")
+      .min(6, "Password must be at least 6 characters")
       .max(72, "Password too long"),
 
     role: z.enum(["STUDENT", "FACULTY"]).default("STUDENT"),

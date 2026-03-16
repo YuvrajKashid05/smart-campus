@@ -5,66 +5,78 @@ import {
   useMemo,
   useState,
 } from "react";
-import { setAuthToken } from "../services/api";
-import authService from "../services/auth";
+import * as authService from "../services/auth";
 
 export const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {
-      const storedUser = localStorage.getItem("user");
-      return storedUser ? JSON.parse(storedUser) : null;
+      const raw = localStorage.getItem("user");
+      return raw ? JSON.parse(raw) : null;
     } catch {
       return null;
     }
   });
 
-  const [token, setToken] = useState(() => localStorage.getItem("token"));
+  const [token, setToken] = useState(() => {
+    const savedToken = localStorage.getItem("token");
+    if (!savedToken) return null;
+
+    try {
+      const payload = JSON.parse(atob(savedToken.split(".")[1]));
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        return null;
+      }
+    } catch {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      return null;
+    }
+
+    return savedToken;
+  });
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const clearAuth = useCallback(() => {
-    setUser(null);
     setToken(null);
-    setAuthToken(null);
+    setUser(null);
     localStorage.removeItem("token");
     localStorage.removeItem("user");
   }, []);
 
-  const persistAuth = useCallback((nextToken, nextUser) => {
-    setToken(nextToken);
-    setUser(nextUser);
-    setAuthToken(nextToken);
-    localStorage.setItem("token", nextToken);
-    localStorage.setItem("user", JSON.stringify(nextUser));
+  const persistAuth = useCallback((authToken, authUser) => {
+    setToken(authToken);
+    setUser(authUser);
+    localStorage.setItem("token", authToken);
+    localStorage.setItem("user", JSON.stringify(authUser));
   }, []);
 
   const refreshUser = useCallback(async () => {
-    const storedToken = localStorage.getItem("token");
+    const currentToken = localStorage.getItem("token");
 
-    if (!storedToken) {
+    if (!currentToken) {
       clearAuth();
-      setLoading(false);
-      return;
+      return null;
     }
 
     try {
-      setAuthToken(storedToken);
-      const response = await authService.me();
+      const response = await authService.getMe();
 
       if (!response?.ok || !response?.user) {
-        throw new Error(response?.error || "Unable to fetch user");
+        throw new Error(response?.error || "Failed to refresh user");
       }
 
-      setToken(storedToken);
       setUser(response.user);
       localStorage.setItem("user", JSON.stringify(response.user));
-      setError("");
-    } catch {
+      return response.user;
+    } catch (err) {
       clearAuth();
-    } finally {
-      setLoading(false);
+      throw err;
     }
   }, [clearAuth]);
 
@@ -72,8 +84,23 @@ export function AuthProvider({ children }) {
     let mounted = true;
 
     const init = async () => {
-      await refreshUser();
-      if (!mounted) return;
+      try {
+        if (localStorage.getItem("token")) {
+          await refreshUser();
+        }
+      } catch (err) {
+        if (mounted) {
+          setError(
+            typeof err?.response?.data?.error === "string"
+              ? err.response.data.error
+              : err.message || "Session expired",
+          );
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
     };
 
     init();
@@ -81,7 +108,7 @@ export function AuthProvider({ children }) {
     return () => {
       mounted = false;
     };
-  }, [clearAuth, refreshUser]);
+  }, [refreshUser]);
 
   const login = useCallback(
     async (email, password) => {
@@ -102,15 +129,12 @@ export function AuthProvider({ children }) {
           user: response.user,
         };
       } catch (err) {
-        const rawError = err.response?.data?.error;
+        const rawError = err?.response?.data?.error;
 
-        let message = "Login failed";
-
-        if (typeof rawError === "string") {
-          message = rawError;
-        } else if (err.message) {
-          message = err.message;
-        }
+        const message =
+          typeof rawError === "string"
+            ? rawError
+            : err.message || "Login failed";
 
         setError(message);
 
@@ -147,17 +171,12 @@ export function AuthProvider({ children }) {
           token: response.token,
         };
       } catch (err) {
-        const rawError = err.response?.data?.error;
+        const rawError = err?.response?.data?.error;
 
-        let message = "Registration failed";
-
-        if (typeof rawError === "string") {
-          message = rawError;
-        } else if (rawError?.properties?.errors?.length) {
-          message = rawError.properties.errors.join(", ");
-        } else if (err.message) {
-          message = err.message;
-        }
+        const message =
+          typeof rawError === "string"
+            ? rawError
+            : err.message || "Registration failed";
 
         setError(message);
 
@@ -176,7 +195,7 @@ export function AuthProvider({ children }) {
     try {
       await authService.logout();
     } catch {
-      // ignore server logout failure
+      // ignore logout API failure
     } finally {
       clearAuth();
     }
@@ -198,15 +217,12 @@ export function AuthProvider({ children }) {
         user: response.user,
       };
     } catch (err) {
-      const rawError = err.response?.data?.error;
+      const rawError = err?.response?.data?.error;
 
-      let message = "Profile update failed";
-
-      if (typeof rawError === "string") {
-        message = rawError;
-      } else if (err.message) {
-        message = err.message;
-      }
+      const message =
+        typeof rawError === "string"
+          ? rawError
+          : err.message || "Profile update failed";
 
       setError(message);
 
