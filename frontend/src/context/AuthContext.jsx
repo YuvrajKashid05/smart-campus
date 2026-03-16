@@ -5,88 +5,79 @@ import {
   useMemo,
   useState,
 } from "react";
-import * as authService from "../services/auth";
+import { setAuthToken } from "../services/api";
+import authService from "../services/auth";
 
 export const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {
-      const raw = localStorage.getItem("user");
-      return raw ? JSON.parse(raw) : null;
+      const storedUser = localStorage.getItem("user");
+      return storedUser ? JSON.parse(storedUser) : null;
     } catch {
       return null;
     }
   });
-  const [token, setToken] = useState(() => {
-    const t = localStorage.getItem("token");
-    if (!t) return null;
-    // Check if JWT is expired before restoring session
-    try {
-      const payload = JSON.parse(atob(t.split(".")[1]));
-      if (payload.exp && payload.exp * 1000 < Date.now()) {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        return null;
-      }
-    } catch {
-      /* malformed token — clear it */ localStorage.removeItem("token");
-      return null;
-    }
-    return t;
-  });
+
+  const [token, setToken] = useState(() => localStorage.getItem("token"));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const clearAuth = useCallback(() => {
-    setToken(null);
     setUser(null);
+    setToken(null);
+    setAuthToken(null);
     localStorage.removeItem("token");
     localStorage.removeItem("user");
   }, []);
 
-  const persistAuth = useCallback((authToken, authUser) => {
-    setToken(authToken);
-    setUser(authUser);
-    localStorage.setItem("token", authToken);
-    localStorage.setItem("user", JSON.stringify(authUser));
+  const persistAuth = useCallback((nextToken, nextUser) => {
+    setToken(nextToken);
+    setUser(nextUser);
+    setAuthToken(nextToken);
+    localStorage.setItem("token", nextToken);
+    localStorage.setItem("user", JSON.stringify(nextUser));
   }, []);
 
   const refreshUser = useCallback(async () => {
-    const currentToken = localStorage.getItem("token");
-    if (!currentToken) return null;
+    const storedToken = localStorage.getItem("token");
 
-    const response = await authService.getMe();
-    if (!response?.ok) {
-      throw new Error(response?.error || "Failed to refresh user");
+    if (!storedToken) {
+      clearAuth();
+      setLoading(false);
+      return;
     }
 
-    setUser(response.user);
-    localStorage.setItem("user", JSON.stringify(response.user));
-    return response.user;
-  }, []);
+    try {
+      setAuthToken(storedToken);
+      const response = await authService.me();
+
+      if (!response?.ok || !response?.user) {
+        throw new Error(response?.error || "Unable to fetch user");
+      }
+
+      setToken(storedToken);
+      setUser(response.user);
+      localStorage.setItem("user", JSON.stringify(response.user));
+      setError("");
+    } catch {
+      clearAuth();
+    } finally {
+      setLoading(false);
+    }
+  }, [clearAuth]);
 
   useEffect(() => {
     let mounted = true;
 
     const init = async () => {
-      try {
-        if (localStorage.getItem("token")) {
-          await refreshUser();
-        }
-      } catch (err) {
-        if (mounted) {
-          clearAuth();
-          setError(err.message || "Session expired");
-        }
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
+      await refreshUser();
+      if (!mounted) return;
     };
 
     init();
+
     return () => {
       mounted = false;
     };
@@ -96,18 +87,37 @@ export function AuthProvider({ children }) {
     async (email, password) => {
       setLoading(true);
       setError("");
+
       try {
         const response = await authService.login(email, password);
+
         if (!response?.ok || !response?.token || !response?.user) {
           throw new Error(response?.error || "Login failed");
         }
+
         persistAuth(response.token, response.user);
-        return { success: true, user: response.user };
+
+        return {
+          success: true,
+          user: response.user,
+        };
       } catch (err) {
-        const message =
-          err.response?.data?.error || err.message || "Login failed";
+        const rawError = err.response?.data?.error;
+
+        let message = "Login failed";
+
+        if (typeof rawError === "string") {
+          message = rawError;
+        } else if (err.message) {
+          message = err.message;
+        }
+
         setError(message);
-        return { success: false, error: message };
+
+        return {
+          success: false,
+          error: message,
+        };
       } finally {
         setLoading(false);
       }
@@ -119,20 +129,42 @@ export function AuthProvider({ children }) {
     async (payload) => {
       setLoading(true);
       setError("");
+
       try {
         const response = await authService.register(payload);
+
         if (!response?.ok) {
           throw new Error(response?.error || "Registration failed");
         }
+
         if (response.token && response.user) {
           persistAuth(response.token, response.user);
         }
-        return { success: true, data: response };
+
+        return {
+          success: true,
+          user: response.user,
+          token: response.token,
+        };
       } catch (err) {
-        const message =
-          err.response?.data?.error || err.message || "Registration failed";
+        const rawError = err.response?.data?.error;
+
+        let message = "Registration failed";
+
+        if (typeof rawError === "string") {
+          message = rawError;
+        } else if (rawError?.properties?.errors?.length) {
+          message = rawError.properties.errors.join(", ");
+        } else if (err.message) {
+          message = err.message;
+        }
+
         setError(message);
-        return { success: false, error: message };
+
+        return {
+          success: false,
+          error: message,
+        };
       } finally {
         setLoading(false);
       }
@@ -144,7 +176,7 @@ export function AuthProvider({ children }) {
     try {
       await authService.logout();
     } catch {
-      // local cleanup is enough even if server logout fails
+      // ignore server logout failure
     } finally {
       clearAuth();
     }
@@ -153,17 +185,35 @@ export function AuthProvider({ children }) {
   const updateUserProfile = useCallback(async (updates) => {
     try {
       const response = await authService.updateProfile(updates);
+
       if (!response?.ok || !response?.user) {
         throw new Error(response?.error || "Profile update failed");
       }
+
       setUser(response.user);
       localStorage.setItem("user", JSON.stringify(response.user));
-      return { success: true, user: response.user };
+
+      return {
+        success: true,
+        user: response.user,
+      };
     } catch (err) {
-      const message =
-        err.response?.data?.error || err.message || "Profile update failed";
+      const rawError = err.response?.data?.error;
+
+      let message = "Profile update failed";
+
+      if (typeof rawError === "string") {
+        message = rawError;
+      } else if (err.message) {
+        message = err.message;
+      }
+
       setError(message);
-      return { success: false, error: message };
+
+      return {
+        success: false,
+        error: message,
+      };
     }
   }, []);
 

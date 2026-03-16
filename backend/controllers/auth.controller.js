@@ -24,15 +24,23 @@ const buildUserResponse = (user) => ({
 
 const registerSchema = z
   .object({
-    name: z.string().trim().min(2, "Full name must be at least 2 characters").max(80, "Name too long"),
+    name: z
+      .string()
+      .trim()
+      .min(2, "Full name must be at least 2 characters")
+      .max(80, "Name too long"),
 
-    // Zod 4 style: avoid z.string().email()
-    email: z.string().trim().max(120, "Email too long").pipe(z.email("Invalid email")),
+    email: z
+      .string()
+      .trim()
+      .max(120, "Email too long")
+      .pipe(z.email("Invalid email")),
 
-    // Min 8 chars, max 72 (bcrypt limit)
-    password: z.string().min(8, "Password must be at least 8 characters").max(72, "Password too long"),
+    password: z
+      .string()
+      .min(8, "Password must be at least 8 characters")
+      .max(72, "Password too long"),
 
-    // SECURITY: ADMIN cannot self-register — must be created by existing admin
     role: z.enum(["STUDENT", "FACULTY"]).default("STUDENT"),
 
     mobileNumber: z.string().trim().max(15).optional(),
@@ -85,7 +93,10 @@ const registerSchema = z
       }
     }
 
-    if (data.role === "FACULTY" && (!data.employeeId || data.employeeId.length < 1)) {
+    if (
+      data.role === "FACULTY" &&
+      (!data.employeeId || data.employeeId.length < 1)
+    ) {
       ctx.addIssue({
         code: "custom",
         path: ["employeeId"],
@@ -95,7 +106,6 @@ const registerSchema = z
   });
 
 const loginSchema = z.object({
-  // Zod 4 style: avoid z.string().email()
   email: z.string().trim().pipe(z.email("Invalid email")),
   password: z.string().min(1, "Password is required"),
 });
@@ -105,9 +115,11 @@ export async function register(req, res) {
     const parsed = registerSchema.safeParse(req.body);
 
     if (!parsed.success) {
+      const firstIssue = parsed.error.issues?.[0];
+
       return res.status(400).json({
         ok: false,
-        error: z.treeifyError(parsed.error), // Zod 4 replacement for .flatten()
+        error: firstIssue?.message || "Invalid registration data",
       });
     }
 
@@ -120,6 +132,7 @@ export async function register(req, res) {
     const normalizedEmployeeId = normalizeUpper(data.employeeId);
 
     const existingUser = await User.findOne({ email: normalizedEmail });
+
     if (existingUser) {
       return res.status(409).json({
         ok: false,
@@ -190,9 +203,11 @@ export async function login(req, res) {
     const parsed = loginSchema.safeParse(req.body);
 
     if (!parsed.success) {
+      const firstIssue = parsed.error.issues?.[0];
+
       return res.status(400).json({
         ok: false,
-        error: z.treeifyError(parsed.error), // Zod 4 replacement
+        error: firstIssue?.message || "Invalid login data",
       });
     }
 
@@ -200,6 +215,7 @@ export async function login(req, res) {
     const normalizedEmail = normalizeLower(email);
 
     const user = await User.findOne({ email: normalizedEmail });
+
     if (!user || user.isActive === false) {
       return res.status(401).json({
         ok: false,
@@ -208,6 +224,7 @@ export async function login(req, res) {
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+
     if (!isPasswordValid) {
       return res.status(401).json({
         ok: false,
@@ -234,6 +251,7 @@ export async function login(req, res) {
     });
   }
 }
+
 export async function me(req, res) {
   return res.json({ ok: true, user: req.user });
 }
@@ -245,29 +263,34 @@ export async function logout(req, res) {
 export async function updateProfile(req, res) {
   try {
     const user = await User.findById(req.user._id);
-    if (!user) return res.status(404).json({ ok: false, error: "User not found" });
+
+    if (!user) {
+      return res.status(404).json({
+        ok: false,
+        error: "User not found",
+      });
+    }
 
     const allowed = ["name", "mobileNumber"];
+
     allowed.forEach((field) => {
-      if (req.body[field] !== undefined) user[field] = req.body[field];
+      if (req.body[field] !== undefined) {
+        user[field] = req.body[field];
+      }
     });
 
     await user.save();
-    const updated = {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      mobileNumber: user.mobileNumber,
-      dept: user.dept,
-      section: user.section,
-      semester: user.semester,
-      rollNo: user.rollNo,
-      employeeId: user.employeeId,
-    };
-    return res.json({ ok: true, user: updated });
+
+    return res.json({
+      ok: true,
+      user: buildUserResponse(user),
+    });
   } catch (err) {
     console.error("UPDATE PROFILE ERROR:", err);
-    return res.status(500).json({ ok: false, error: "Server error" });
+
+    return res.status(500).json({
+      ok: false,
+      error: "Server error",
+    });
   }
 }
