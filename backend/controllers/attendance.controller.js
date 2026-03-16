@@ -235,13 +235,18 @@ export async function markAttendance(req, res) {
         });
       }
 
-      if (accuracy != null && accuracy > 35) {
-        return res.status(403).json({
-          ok: false,
-          error: `GPS accuracy too low (${Math.round(accuracy)}m). Move closer to the classroom and try again.`,
-        });
-      }
+      // allow weak GPS but compensate using accuracy
+      const radius = session.classroomLocation?.radiusMeters || 80;
 
+// effective allowed range
+      const allowedDistance = radius + (accuracy || 0);
+
+        if (distanceMeters > allowedDistance) {
+          return res.status(403).json({
+            ok: false,
+            error: `You are outside classroom range`
+          });
+        }
       if (hasClassroomGPS) {
         distanceMeters = haversineMeters(
           session.classroomLocation.lat,
