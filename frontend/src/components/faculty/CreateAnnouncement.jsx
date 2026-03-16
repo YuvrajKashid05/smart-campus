@@ -244,7 +244,8 @@ export default function CreateAnnouncement() {
             {/* AI Generator */}
             <div className="p-4 rounded-2xl bg-linear-to-r from-violet-50 to-indigo-50 border border-violet-100">
               <p className="text-xs font-bold text-violet-700 mb-2 flex items-center gap-1.5">
-                <MdAutoAwesome size={14} />✨ AI Announcement Generator
+                <MdAutoAwesome size={14} />
+                AI Announcement Generator
               </p>
               <div className="flex gap-2">
                 <input

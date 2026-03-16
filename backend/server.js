@@ -4,7 +4,6 @@ dotenv.config(); // MUST be first
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
-import morgan from "morgan";
 
 import connectDB from "./config/db.js";
 import {
@@ -28,15 +27,12 @@ import userRoutes from "./routes/user.routes.js";
 const app  = express();
 const PROD = process.env.NODE_ENV === "production";
 
-// ── Security headers ──────────────────────────────────────────────────
+//Security Headers
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
 
-// ── Request logging ───────────────────────────────────────────────────
-app.use(morgan(PROD ? "combined" : "dev"));
-
-// ── CORS ──────────────────────────────────────────────────────────────
+//CORS
 const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:5173")
   .split(",").map(v => v.trim()).filter(Boolean);
 
@@ -48,16 +44,16 @@ app.use(cors({
   credentials: true,
 }));
 
-// ── Body parser ───────────────────────────────────────────────────────
+//Body parser
 app.use(express.json({ limit: "1mb" }));
 
-// ── Global rate limit (all routes) ───────────────────────────────────
+//Global RateLimit for (all routes)
 app.use(globalLimiter);
 
-// ── Health check ──────────────────────────────────────────────────────
+//Health check
 app.get("/", (_req, res) => res.json({ ok: true, message: "Smart Campus API 🚀", env: process.env.NODE_ENV || "development" }));
 
-// ── Routes with targeted limits ───────────────────────────────────────
+//Routes
 app.use("/api/auth",authLimiter, authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/notices", noticeRoutes);

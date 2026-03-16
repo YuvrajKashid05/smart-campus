@@ -54,7 +54,7 @@ export const qrLimiter = rateLimit({
 // 20 marks per IP per 10 minutes (prevents rapid re-scan loops)
 export const attendanceLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
-  max: 20,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
   handler,
@@ -64,7 +64,7 @@ export const attendanceLimiter = rateLimit({
 // 5 complaints per IP per hour (prevents spam)
 export const complaintLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 5,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
   handler,
