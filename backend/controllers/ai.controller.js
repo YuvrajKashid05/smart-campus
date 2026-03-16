@@ -71,14 +71,14 @@ export async function generateAnnouncement(req, res) {
     if (!topic) return res.status(400).json({ ok: false, error: "Topic is required" });
 
     const prompt = `You are a college faculty member writing an announcement.
-Topic: "${topic}"
-Target audience: ${audience}${dept ? `, Department: ${dept}` : ""}
-Requirements:
-- Write an engaging, clear announcement
-- Under 100 words
-- Friendly but professional tone
-- Include a call to action if relevant
-Write only the announcement text, nothing else.`;
+                      Topic: "${topic}"
+                      Target audience: ${audience}${dept ? `, Department: ${dept}` : ""}
+                      Requirements:
+                      - Write an engaging, clear announcement
+                      - Under 100 words
+                      - Friendly but professional tone
+                      - Include a call to action if relevant
+                      Write only the announcement text, nothing else.`;
 
     const text = await gemini(prompt);
     return res.json({ ok: true, text: text.trim() });
@@ -97,17 +97,17 @@ export async function analyzeComplaint(req, res) {
     if (!message) return res.status(400).json({ ok: false, error: "Complaint message required" });
 
     const prompt = `Analyze this college campus complaint and respond ONLY with valid JSON (no markdown, no explanation):
-Category: ${category || "OTHER"}
-Complaint: "${message}"
+                      Category: ${category || "OTHER"}
+                      Complaint: "${message}"
 
-Respond with exactly this JSON structure:
-{
-  "priority": "HIGH" | "MEDIUM" | "LOW",
-  "estimatedDays": <number 1-14>,
-  "department": "IT department" | "Facility management" | "Academic office" | "Administration",
-  "suggestedResponse": "<a professional 2-3 sentence response to the student>",
-  "tags": ["<tag1>", "<tag2>"]
-}`;
+                      Respond with exactly this JSON structure:
+                      {
+                        "priority": "HIGH" | "MEDIUM" | "LOW",
+                        "estimatedDays": <number 1-14>,
+                        "department": "IT department" | "Facility management" | "Academic office" | "Administration",
+                        "suggestedResponse": "<a professional 2-3 sentence response to the student>",
+                        "tags": ["<tag1>", "<tag2>"]
+                      }`;
 
     const raw = await gemini(prompt);
     let analysis;
