@@ -12,16 +12,15 @@ function haversineMeters(lat1, lng1, lat2, lng2) {
   const dLng = r(lng2 - lng1);
   const a =
     Math.sin(dLat / 2) ** 2 +
-    Math.cos(r(lat1)) *
-      Math.cos(r(lat2)) *
-      Math.sin(dLng / 2) ** 2;
+    Math.cos(r(lat1)) * Math.cos(r(lat2)) * Math.sin(dLng / 2) ** 2;
 
   return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
 function normalizeSession(session) {
   if (!session) return session;
-  const plain = typeof session.toObject === "function" ? session.toObject() : session;
+  const plain =
+    typeof session.toObject === "function" ? session.toObject() : session;
   return { ...plain, token: plain.qrToken };
 }
 
@@ -65,9 +64,7 @@ export async function startSession(req, res) {
           ? Number(req.body.year)
           : undefined,
       ttlMinutes:
-        req.body.ttlMinutes != null
-          ? Number(req.body.ttlMinutes)
-          : undefined,
+        req.body.ttlMinutes != null ? Number(req.body.ttlMinutes) : undefined,
       classroomLat:
         req.body.classroomLat != null
           ? Number(req.body.classroomLat)
@@ -150,7 +147,8 @@ export async function markAttendance(req, res) {
       ...req.body,
       lat: req.body.lat != null ? Number(req.body.lat) : undefined,
       lng: req.body.lng != null ? Number(req.body.lng) : undefined,
-      accuracy: req.body.accuracy != null ? Number(req.body.accuracy) : undefined,
+      accuracy:
+        req.body.accuracy != null ? Number(req.body.accuracy) : undefined,
     });
 
     if (!parsed.success) {
@@ -160,16 +158,12 @@ export async function markAttendance(req, res) {
       });
     }
 
-    const {
-      qrToken,
-      lat,
-      lng,
-      accuracy,
-      deviceFingerprint,
-      deviceInfo,
-    } = parsed.data;
+    const { qrToken, lat, lng, accuracy, deviceFingerprint, deviceInfo } =
+      parsed.data;
 
-    const session = await AttendanceSession.findOne({ qrToken: qrToken.trim() });
+    const session = await AttendanceSession.findOne({
+      qrToken: qrToken.trim(),
+    });
 
     if (!session) {
       return res.status(404).json({
@@ -187,20 +181,14 @@ export async function markAttendance(req, res) {
 
     const student = req.user;
 
-    if (
-      session.dept &&
-      session.dept !== student.dept?.toUpperCase()
-    ) {
+    if (session.dept && session.dept !== student.dept?.toUpperCase()) {
       return res.status(403).json({
         ok: false,
         error: `This attendance is for ${session.dept} only.`,
       });
     }
 
-    if (
-      session.section &&
-      session.section !== student.section?.toUpperCase()
-    ) {
+    if (session.section && session.section !== student.section?.toUpperCase()) {
       return res.status(403).json({
         ok: false,
         error: `This attendance is for Section ${session.section} only.`,
@@ -238,21 +226,21 @@ export async function markAttendance(req, res) {
       // allow weak GPS but compensate using accuracy
       const radius = session.classroomLocation?.radiusMeters || 80;
 
-// effective allowed range
+      // effective allowed range
       const allowedDistance = radius + (accuracy || 0);
 
-        if (distanceMeters > allowedDistance) {
-          return res.status(403).json({
-            ok: false,
-            error: `You are outside classroom range`
-          });
-        }
+      if (distanceMeters > allowedDistance) {
+        return res.status(403).json({
+          ok: false,
+          error: `You are outside classroom range`,
+        });
+      }
       if (hasClassroomGPS) {
         distanceMeters = haversineMeters(
           session.classroomLocation.lat,
           session.classroomLocation.lng,
           lat,
-          lng
+          lng,
         );
 
         const radius = session.classroomLocation.radiusMeters || 100;
@@ -341,18 +329,18 @@ export async function getFraudReport(req, res) {
       .sort({ markedAt: 1 });
 
     const flagged = records.filter(
-      (record) => record.locationFlagged || record.proxyFlagged
+      (record) => record.locationFlagged || record.proxyFlagged,
     );
     const total = records.length;
 
     const rapidPairs = [];
     for (let i = 0; i < records.length - 1; i++) {
       const diff = Math.abs(
-        new Date(records[i + 1].markedAt) - new Date(records[i].markedAt)
+        new Date(records[i + 1].markedAt) - new Date(records[i].markedAt),
       );
       if (diff < 2000) {
         rapidPairs.push(
-          `${records[i].student?.name} & ${records[i + 1].student?.name} (${diff}ms apart)`
+          `${records[i].student?.name} & ${records[i + 1].student?.name} (${diff}ms apart)`,
         );
       }
     }
@@ -364,7 +352,7 @@ export async function getFraudReport(req, res) {
         fingerprintMap[record.deviceFingerprint] = [];
       }
       fingerprintMap[record.deviceFingerprint].push(
-        record.student?.name || "Unknown"
+        record.student?.name || "Unknown",
       );
     });
 
@@ -372,7 +360,7 @@ export async function getFraudReport(req, res) {
       .filter(([, names]) => names.length > 1)
       .map(
         ([fingerprint, names]) =>
-          `Device ${fingerprint.slice(0, 8)}… used by: ${names.join(", ")}`
+          `Device ${fingerprint.slice(0, 8)}… used by: ${names.join(", ")}`,
       );
 
     if (
@@ -387,11 +375,13 @@ export async function getFraudReport(req, res) {
         rapidPairs: [],
         deviceDuplicates: [],
         flagged: [],
-        aiAnalysis: "Risk: LOW\nReason: No suspicious attendance pattern found.\nAction: No action needed.",
+        aiAnalysis:
+          "Risk: LOW\nReason: No suspicious attendance pattern found.\nAction: No action needed.",
       });
     }
 
-    let aiAnalysis = "Risk: REVIEW\nReason: Suspicious attendance pattern found.\nAction: Check flagged records manually.";
+    let aiAnalysis =
+      "Risk: REVIEW\nReason: Suspicious attendance pattern found.\nAction: Check flagged records manually.";
 
     if (process.env.GEMINI_API_KEY) {
       const flaggedData = flagged.map((record) => ({
@@ -497,7 +487,7 @@ export async function getFraudSummary(req, res) {
           flagged,
           proxy,
         };
-      })
+      }),
     );
 
     return res.json({ ok: true, summary });
@@ -512,7 +502,9 @@ export async function manualMarkAttendance(req, res) {
     const { studentId } = req.body;
 
     if (!studentId) {
-      return res.status(400).json({ ok: false, error: "studentId is required" });
+      return res
+        .status(400)
+        .json({ ok: false, error: "studentId is required" });
     }
 
     const session = await AttendanceSession.findById(sessionId);
@@ -695,7 +687,7 @@ export async function getDefaulters(req, res) {
     if (semester) userFilter.semester = parseInt(semester, 10);
 
     const students = await User.find(userFilter).select(
-      "name rollNo email dept section semester mobileNumber"
+      "name rollNo email dept section semester mobileNumber",
     );
 
     const records = await AttendanceRecord.find({
