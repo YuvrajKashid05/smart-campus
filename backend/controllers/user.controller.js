@@ -15,6 +15,7 @@ export async function me(req, res) {
   return res.json({ ok: true, user: req.user });
 }
 
+//list entire user
 export async function listUsers(req, res) {
   try {
     const { role, dept, section } = req.query || {};
@@ -45,6 +46,7 @@ export async function listUsers(req, res) {
   }
 }
 
+//update studnet
 export async function updateStudentByAdminOrFaculty(req, res) {
   try {
     const body = req.body || {};
@@ -159,6 +161,7 @@ export async function updateStudentByAdminOrFaculty(req, res) {
   }
 }
 
+//delete user
 export async function deleteUserByAdmin(req, res) {
   try {
     const user = await User.findById(req.params.id);

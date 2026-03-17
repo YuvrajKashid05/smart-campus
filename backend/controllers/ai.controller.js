@@ -6,6 +6,7 @@ import Complaint from "../models/complaint.model.js";
 import Notice from "../models/notice.model.js";
 import User from "../models/user.model.js";
 
+//input sanitization
 function sanitizeAIInput(str = "", maxLen = 500) {
   if (typeof str !== "string") return "";
   return str
@@ -20,6 +21,7 @@ function sanitizeAIInput(str = "", maxLen = 500) {
     .trim();
 }
 
+//reuire gemini key
 function requireKey(res) {
   if (!process.env.GEMINI_API_KEY) {
     res.status(503).json({ ok: false, error: "GEMINI_API_KEY not set in .env" });
@@ -41,6 +43,7 @@ async function gemini(prompt) {
   );
 }
 
+//generate notice
 export async function generateNotice(req, res) {
   try {
     if (!requireKey(res)) return;
@@ -75,6 +78,7 @@ Write only the notice body.`;
   }
 }
 
+//generate annoucement
 export async function generateAnnouncement(req, res) {
   try {
     if (!requireKey(res)) return;
@@ -109,6 +113,7 @@ Write only the announcement text.`;
   }
 }
 
+//analyze complain
 export async function analyzeComplaint(req, res) {
   try {
     if (!requireKey(res)) return;
@@ -163,6 +168,7 @@ Respond with exactly:
   }
 }
 
+//attendance report
 export async function attendanceRiskReport(req, res) {
   try {
     if (!requireKey(res)) return;
@@ -276,6 +282,7 @@ ${JSON.stringify(studentStats)}`;
   }
 }
 
+//weekly report
 export async function weeklyReport(req, res) {
   try {
     if (!requireKey(res)) return;
@@ -354,6 +361,7 @@ Keep it under 200 words.`;
   }
 }
 
+//stude helo (chatbot)
 export async function studyHelp(req, res) {
   try {
     if (!requireKey(res)) return;
@@ -384,6 +392,7 @@ Keep the answer under 200 words.`;
   }
 }
 
+//ask to Gemini
 export async function ask(req, res) {
   try {
     if (!requireKey(res)) return;
