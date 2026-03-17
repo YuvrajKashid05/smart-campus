@@ -121,13 +121,11 @@ export default function DefaulterList() {
     a.click();
   };
 
-  const barData = filtered
-    .slice(0, 15)
-    .map((d) => ({
-      name: d.student?.name?.split(" ")[0] || "?",
-      pct: d.percentage,
-      rollNo: d.student?.rollNo || "",
-    }));
+  const barData = filtered.slice(0, 15).map((d) => ({
+    name: d.student?.name?.split(" ")[0] || "?",
+    pct: d.percentage,
+    rollNo: d.student?.rollNo || "",
+  }));
 
   return (
     <div className={PAGE + " fade-up"}>
@@ -415,7 +413,7 @@ export default function DefaulterList() {
                               {d.attended}
                             </td>
                             <td className="px-4 py-3 text-sm text-slate-500">
-                              {d.totalSession}
+                              {d.totalSessions}
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2">
