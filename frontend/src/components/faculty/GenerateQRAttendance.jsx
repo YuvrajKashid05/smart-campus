@@ -379,7 +379,7 @@ export default function GenerateQRAttendance() {
                         )}
                         {gpsLoading
                           ? "Getting your location…"
-                          : "📍 Set My Location as Classroom"}
+                          : "Set My Location as Classroom"}
                       </button>
                       {gpsError && (
                         <p className="text-xs text-red-600">{gpsError}</p>
