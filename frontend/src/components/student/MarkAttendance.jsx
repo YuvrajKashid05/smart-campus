@@ -103,6 +103,9 @@ export default function MarkAttendance() {
   const requestGPS = () => {
     if (!navigator.geolocation) {
       setGpsStatus("unavailable");
+      setGpsLat(null);
+      setGpsLng(null);
+      setGpsAccuracy(null);
       return;
     }
 
@@ -116,8 +119,7 @@ export default function MarkAttendance() {
         setGpsLng(longitude);
         setGpsAccuracy(accuracy ?? null);
 
-        // Indoor classrooms often have weaker GPS.
-        // Mark as weak only for very poor accuracy, but do not block attendance.
+        // Indoor GPS can be weak. Allow it, but mark the state.
         if (accuracy != null && accuracy > 80) {
           setGpsStatus("weak");
           return;
@@ -125,14 +127,25 @@ export default function MarkAttendance() {
 
         setGpsStatus("ok");
       },
-      () => {
-        setGpsStatus("denied");
+      (err) => {
+        setGpsLat(null);
+        setGpsLng(null);
         setGpsAccuracy(null);
+
+        if (err?.code === 1) {
+          // PERMISSION_DENIED
+          setGpsStatus("denied");
+        } else if (err?.code === 2 || err?.code === 3) {
+          // POSITION_UNAVAILABLE or TIMEOUT
+          setGpsStatus("unavailable");
+        } else {
+          setGpsStatus("unavailable");
+        }
       },
       {
         enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
+        timeout: 10000,
+        maximumAge: 30000,
       },
     );
   };
@@ -169,14 +182,10 @@ export default function MarkAttendance() {
       return;
     }
 
-    if (gpsStatus === "loading") {
-      setError("Wait for GPS before marking attendance.");
-      return;
-    }
-
     let lat = null;
     let lng = null;
     let accuracy = null;
+    let preWarning = "";
 
     if (gpsStatus === "ok" || gpsStatus === "weak") {
       lat = gpsLat;
@@ -184,16 +193,24 @@ export default function MarkAttendance() {
       accuracy = gpsAccuracy;
     }
 
+    if (gpsStatus === "loading") {
+      preWarning =
+        "⚠️ GPS is still loading. Attendance will continue without location verification.";
+    } else if (gpsStatus === "weak") {
+      preWarning =
+        "⚠️ GPS signal is weak indoors. Attendance will still be verified.";
+    } else if (gpsStatus === "denied") {
+      preWarning =
+        "⚠️ Location access is denied. Attendance will continue without GPS verification.";
+    } else if (gpsStatus === "unavailable") {
+      preWarning =
+        "⚠️ GPS is unavailable on this device right now. Attendance will continue without location verification.";
+    }
+
     setLoading(true);
     setError("");
     setSuccess("");
-    setFraudWarning("");
-
-    if (gpsStatus === "weak") {
-      setFraudWarning(
-        "⚠️ GPS signal is weak indoors. Attendance will still be verified.",
-      );
-    }
+    setFraudWarning(preWarning);
 
     try {
       const response = await attendanceService.markAttendance(
@@ -209,10 +226,7 @@ export default function MarkAttendance() {
         throw new Error(response?.error || "Failed to mark attendance.");
       }
 
-      let warning =
-        gpsStatus === "weak"
-          ? "⚠️ GPS signal was weak indoors, but verification was attempted."
-          : "";
+      let warning = preWarning;
 
       if (response.proxyFlagged) {
         warning =
@@ -407,7 +421,8 @@ export default function MarkAttendance() {
           <span className={GPS_STYLE.text}>{GPS_LABEL}</span>
           {(gpsStatus === "denied" ||
             gpsStatus === "idle" ||
-            gpsStatus === "weak") && (
+            gpsStatus === "weak" ||
+            gpsStatus === "unavailable") && (
             <button
               onClick={requestGPS}
               className="ml-auto shrink-0 font-semibold text-indigo-600 hover:underline"
@@ -506,7 +521,9 @@ export default function MarkAttendance() {
                         ? "bg-emerald-500"
                         : gpsStatus === "weak"
                           ? "bg-amber-500"
-                          : "bg-slate-500"
+                          : gpsStatus === "loading"
+                            ? "bg-blue-500"
+                            : "bg-slate-500"
                     }`}
                   >
                     <MdLocationOn size={10} />
@@ -514,7 +531,9 @@ export default function MarkAttendance() {
                       ? "GPS ✓"
                       : gpsStatus === "weak"
                         ? "GPS weak"
-                        : "GPS?"}
+                        : gpsStatus === "loading"
+                          ? "GPS loading"
+                          : "GPS?"}
                   </span>
 
                   <span className="rounded-full bg-indigo-500 px-2 py-1 text-[10px] font-bold text-white">
