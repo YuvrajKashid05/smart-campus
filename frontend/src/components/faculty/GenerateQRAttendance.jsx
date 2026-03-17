@@ -355,7 +355,7 @@ export default function GenerateQRAttendance() {
                     <div>
                       <p className="text-xs font-bold text-indigo-800 flex items-center gap-1.5">
                         <MdLocationOn size={14} />
-                        📍 Classroom Location (AI Fraud Detection)
+                        Classroom Location (AI Fraud Detection)
                       </p>
                       <p className="text-[11px] text-indigo-600 mt-0.5">
                         Set your GPS so AI can flag students who mark from
