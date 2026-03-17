@@ -119,7 +119,6 @@ export default function MarkAttendance() {
         setGpsLng(longitude);
         setGpsAccuracy(accuracy ?? null);
 
-        // Indoor GPS can be weak. Allow it, but mark the state.
         if (accuracy != null && accuracy > 80) {
           setGpsStatus("weak");
           return;
@@ -133,10 +132,8 @@ export default function MarkAttendance() {
         setGpsAccuracy(null);
 
         if (err?.code === 1) {
-          // PERMISSION_DENIED
           setGpsStatus("denied");
         } else if (err?.code === 2 || err?.code === 3) {
-          // POSITION_UNAVAILABLE or TIMEOUT
           setGpsStatus("unavailable");
         } else {
           setGpsStatus("unavailable");
@@ -405,36 +402,41 @@ export default function MarkAttendance() {
 
   return (
     <div className={`${PAGE} fade-up`}>
-      <div className="mx-auto max-w-3xl">
-        <div className="mb-6 text-center">
-          <h1 className="text-2xl font-bold text-slate-900">Mark Attendance</h1>
-          <p className="mt-1 text-sm text-slate-500">
+      <div className="mx-auto w-full max-w-2xl px-0 sm:px-2">
+        <div className="mb-5 px-1 text-center sm:mb-6">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            Mark Attendance
+          </h1>
+          <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500 sm:text-sm">
             Scan the QR shown by your faculty. Location and device are verified
             automatically.
           </p>
         </div>
 
         <div
-          className={`mb-4 flex items-center gap-2.5 rounded-xl border p-3 text-xs font-medium ${GPS_STYLE.bg}`}
+          className={`mb-4 flex items-start gap-2.5 rounded-2xl border p-3 text-xs font-medium sm:items-center ${GPS_STYLE.bg}`}
         >
           {GPS_STYLE.icon}
-          <span className={GPS_STYLE.text}>{GPS_LABEL}</span>
+          <span className={`min-w-0 flex-1 leading-5 ${GPS_STYLE.text}`}>
+            {GPS_LABEL}
+          </span>
+
           {(gpsStatus === "denied" ||
             gpsStatus === "idle" ||
             gpsStatus === "weak" ||
             gpsStatus === "unavailable") && (
             <button
               onClick={requestGPS}
-              className="ml-auto shrink-0 font-semibold text-indigo-600 hover:underline"
+              className="shrink-0 rounded-lg px-1 py-0.5 font-semibold text-indigo-600 hover:underline"
             >
               Retry
             </button>
           )}
         </div>
 
-        <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
-          <span>🔒</span>
-          <span>
+        <div className="mb-4 flex items-start gap-2.5 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
+          <span className="mt-0.5 shrink-0">🔒</span>
+          <span className="min-w-0 wrap-break-word leading-5">
             Device ID:{" "}
             <span className="font-mono text-slate-700">
               {fingerprint.current || "N/A"}
@@ -462,61 +464,71 @@ export default function MarkAttendance() {
         )}
 
         {success && (
-          <div className="mb-4 flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-            <MdCheckCircle size={22} className="shrink-0 text-emerald-500" />
-            <p className="text-sm font-semibold text-emerald-800">{success}</p>
+          <div className="mb-4 flex items-start gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+            <MdCheckCircle
+              size={22}
+              className="mt-0.5 shrink-0 text-emerald-500"
+            />
+            <p className="text-sm font-semibold leading-6 text-emerald-800">
+              {success}
+            </p>
           </div>
         )}
 
         {fraudWarning && (
           <div className="mb-4 flex items-start gap-2.5 rounded-2xl border border-amber-300 bg-amber-50 p-4">
             <MdWarning size={20} className="mt-0.5 shrink-0 text-amber-500" />
-            <p className="text-sm font-medium text-amber-800">{fraudWarning}</p>
+            <p className="text-sm font-medium leading-6 text-amber-800">
+              {fraudWarning}
+            </p>
           </div>
         )}
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+        <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5 md:p-6">
           {!cameraActive ? (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-center">
-              <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
-                <MdQrCode2 size={38} className="text-indigo-600" />
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-center sm:p-6">
+              <div className="mx-auto mb-4 flex h-18 w-18 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 sm:h-20 sm:w-20">
+                <MdQrCode2
+                  size={36}
+                  className="text-indigo-600 sm:text-[38px]"
+                />
               </div>
 
               <h2 className="text-lg font-semibold text-slate-900">
                 Scan QR Code
               </h2>
 
-              <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
                 Camera auto-detects the QR. GPS and device ID are captured
                 automatically for fraud detection.
               </p>
 
               <button
                 onClick={startCamera}
-                className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-indigo-700"
+                className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3.5 text-sm font-bold text-white transition hover:bg-indigo-700 sm:w-auto"
               >
                 <MdCameraAlt size={18} />
                 Open Camera
               </button>
             </div>
           ) : (
-            <div className="rounded-2xl border border-slate-200 bg-slate-950 p-3 text-white">
-              <div className="relative aspect-video overflow-hidden rounded-xl bg-black">
+            <div className="rounded-3xl border border-slate-200 bg-slate-950 p-2.5 text-white sm:p-3">
+              <div className="relative overflow-hidden rounded-[20px] bg-black">
                 <video
                   ref={videoRef}
-                  className="h-full w-full object-cover"
+                  className="block h-85 w-full object-cover sm:h-105"
                   muted
                   playsInline
                 />
                 <canvas ref={canvasRef} className="hidden" />
 
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <div className="h-52 w-52 rounded-2xl border-4 border-indigo-400/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" />
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-4">
+                  <div className="h-45 w-45 rounded-2xl border-4 border-indigo-400/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)] sm:h-55 sm:w-55" />
                 </div>
 
-                <div className="absolute left-3 top-3 flex gap-1.5">
+                <div className="absolute left-3 right-3 top-3 flex flex-wrap gap-2">
                   <span
-                    className={`flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold text-white ${
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold text-white ${
                       gpsStatus === "ok"
                         ? "bg-emerald-500"
                         : gpsStatus === "weak"
@@ -536,24 +548,26 @@ export default function MarkAttendance() {
                           : "GPS?"}
                   </span>
 
-                  <span className="rounded-full bg-indigo-500 px-2 py-1 text-[10px] font-bold text-white">
+                  <span className="inline-flex items-center rounded-full bg-indigo-500 px-2.5 py-1 text-[10px] font-bold text-white">
                     🔒 Device logged
                   </span>
                 </div>
+
+                <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/85 via-black/40 to-transparent px-4 pb-4 pt-12">
+                  <p className="text-sm font-medium text-white sm:text-base">
+                    {detected
+                      ? "QR detected — processing…"
+                      : "Point camera at the QR code"}
+                  </p>
+                </div>
               </div>
 
-              <div className="mt-3 flex items-center justify-between gap-3">
-                <p className="text-sm text-slate-200">
-                  {detected
-                    ? "QR detected — processing…"
-                    : "Point camera at the QR code"}
-                </p>
-
+              <div className="mt-3">
                 <button
                   onClick={stopCamera}
-                  className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
+                  className="w-full rounded-2xl border border-white/15 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
                 >
-                  Stop
+                  Stop Camera
                 </button>
               </div>
             </div>
@@ -561,7 +575,7 @@ export default function MarkAttendance() {
 
           <div className="my-5 flex items-center gap-3">
             <div className="h-px flex-1 bg-slate-200" />
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
               or enter manually
             </span>
             <div className="h-px flex-1 bg-slate-200" />
@@ -579,13 +593,13 @@ export default function MarkAttendance() {
               onChange={(e) => setQrInput(e.target.value)}
               placeholder="Paste token or raw QR JSON here…"
               rows={4}
-              className="w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+              className="w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 text-sm leading-6 outline-none focus:border-indigo-500"
             />
 
             <button
               type="submit"
               disabled={loading || !qrInput.trim()}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3.5 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
             >
               <MdCheckCircle size={17} />
               {loading ? "Processing…" : "Mark Attendance"}
@@ -597,7 +611,7 @@ export default function MarkAttendance() {
               <MdInfo size={15} />
               AI Fraud Detection active
             </p>
-            <ul className="list-inside list-disc space-y-1 text-xs text-blue-700">
+            <ul className="list-inside list-disc space-y-1 text-xs leading-5 text-blue-700">
               <li>GPS location is checked against classroom range</li>
               <li>Indoor weak GPS is allowed and verified by backend</li>
               <li>Shared-device proxy attendance is flagged</li>
