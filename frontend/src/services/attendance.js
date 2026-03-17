@@ -41,7 +41,17 @@ export const getSessionRecords = (id) =>
   api.get(`/attendance/sessions/${id}/records`).then((r) => r.data);
 
 export const manualMarkStudent = (sid, studentId) =>
-  api.post(`/attendance/sessions/${sid}/manual-mark`, { studentId }).then((r) => r.data);
+  api
+    .post(`/attendance/sessions/${sid}/manual-mark`, { studentId })
+    .then((r) => r.data);
+
+export const deleteSession = (sessionId) =>
+  api.delete(`/attendance/sessions/${sessionId}`).then((r) => r.data);
+
+export const unmarkAttendance = (sessionId, recordId) =>
+  api
+    .delete(`/attendance/sessions/${sessionId}/records/${recordId}`)
+    .then((r) => r.data);
 
 export const getDefaulters = (filters = {}) =>
   api.get("/attendance/defaulters", { params: filters }).then((r) => r.data);

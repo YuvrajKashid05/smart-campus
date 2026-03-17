@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   MdCheckCircle,
+  MdDelete,
   MdGroups,
   MdOutlineHistory,
   MdPersonAdd,
   MdRefresh,
   MdSearch,
+  MdWarning,
 } from "react-icons/md";
 import * as attendanceService from "../../services/attendance";
 import * as usersService from "../../services/users";
@@ -34,6 +36,8 @@ export default function AttendanceReport() {
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [deletingSessionId, setDeletingSessionId] = useState("");
+  const [unmarkingId, setUnmarkingId] = useState("");
 
   const flash = (message, type = "success") => {
     if (type === "success") {
@@ -51,10 +55,22 @@ export default function AttendanceReport() {
     try {
       const res = await attendanceService.getMySessions();
       if (!res?.ok) throw new Error(res?.error || "Failed to load sessions.");
-      setSessions(res.sessions || []);
-      if (!selected && res.sessions?.length) {
-        setSelected(res.sessions[0]);
+      const nextSessions = res.sessions || [];
+      setSessions(nextSessions);
+
+      if (!nextSessions.length) {
+        setSelected(null);
+        setRecords([]);
+        return;
       }
+
+      if (!selected?._id) {
+        setSelected(nextSessions[0]);
+        return;
+      }
+
+      const stillExists = nextSessions.find((s) => s._id === selected._id);
+      setSelected(stillExists || nextSessions[0]);
     } catch (err) {
       setError(
         err?.response?.data?.error ||
@@ -105,6 +121,7 @@ export default function AttendanceReport() {
         role: "STUDENT",
         dept: selected?.dept || undefined,
       });
+
       const filtered = (res?.users || []).filter((student) => {
         const deptOk = !selected?.dept || student?.dept === selected.dept;
         const sectionOk =
@@ -112,8 +129,10 @@ export default function AttendanceReport() {
         const semesterOk =
           !selected?.semester ||
           Number(student?.semester) === Number(selected.semester);
+
         return student?.role === "STUDENT" && deptOk && sectionOk && semesterOk;
       });
+
       setStudents(filtered);
     } catch {
       flash("Failed to load students.", "error");
@@ -124,6 +143,7 @@ export default function AttendanceReport() {
 
   const handleManualMark = async (studentId) => {
     if (!selected?._id || !studentId) return;
+
     setMarkingId(studentId);
     try {
       const res = await attendanceService.manualMarkStudent(
@@ -131,11 +151,13 @@ export default function AttendanceReport() {
         studentId,
       );
       if (!res?.ok) throw new Error(res?.error || "Failed to mark attendance.");
+
       flash(
         res.alreadyMarked
           ? "Attendance already marked for this student."
           : "Student marked present.",
       );
+
       await loadRecords(selected);
     } catch (err) {
       flash(
@@ -146,6 +168,73 @@ export default function AttendanceReport() {
       );
     } finally {
       setMarkingId("");
+    }
+  };
+
+  const handleDeleteSession = async (sessionId) => {
+    if (!sessionId) return;
+
+    const confirmed = window.confirm(
+      "Delete this session? All attendance records of this session will also be deleted.",
+    );
+    if (!confirmed) return;
+
+    setDeletingSessionId(sessionId);
+    try {
+      const res = await attendanceService.deleteSession(sessionId);
+      if (!res?.ok) {
+        throw new Error(res?.error || "Failed to delete session.");
+      }
+
+      const nextSessions = sessions.filter((s) => s._id !== sessionId);
+      setSessions(nextSessions);
+
+      if (selected?._id === sessionId) {
+        setSelected(nextSessions[0] || null);
+        setRecords([]);
+        setShowManual(false);
+      }
+
+      flash("Session deleted successfully.");
+    } catch (err) {
+      flash(
+        err?.response?.data?.error ||
+          err?.message ||
+          "Failed to delete session.",
+        "error",
+      );
+    } finally {
+      setDeletingSessionId("");
+    }
+  };
+
+  const handleUnmark = async (recordId) => {
+    if (!selected?._id || !recordId) return;
+
+    const confirmed = window.confirm("Unmark this flagged attendance record?");
+    if (!confirmed) return;
+
+    setUnmarkingId(recordId);
+    try {
+      const res = await attendanceService.unmarkAttendance(
+        selected._id,
+        recordId,
+      );
+      if (!res?.ok) {
+        throw new Error(res?.error || "Failed to unmark attendance.");
+      }
+
+      setRecords((prev) => prev.filter((r) => r._id !== recordId));
+      flash("Flagged attendance unmarked.");
+    } catch (err) {
+      flash(
+        err?.response?.data?.error ||
+          err?.message ||
+          "Failed to unmark attendance.",
+        "error",
+      );
+    } finally {
+      setUnmarkingId("");
     }
   };
 
@@ -162,6 +251,7 @@ export default function AttendanceReport() {
   const filteredStudents = useMemo(() => {
     const term = query.trim().toLowerCase();
     if (!term) return students;
+
     return students.filter(
       (student) =>
         student?.name?.toLowerCase().includes(term) ||
@@ -179,9 +269,11 @@ export default function AttendanceReport() {
               Attendance Report
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              View session-wise attendance and manually mark students.
+              View session-wise attendance, unmark flagged records, and delete
+              accidental sessions.
             </p>
           </div>
+
           <button
             type="button"
             onClick={loadSessions}
@@ -197,6 +289,7 @@ export default function AttendanceReport() {
             <Alert type="error">{error}</Alert>
           </div>
         )}
+
         {success && (
           <div className="mb-4">
             <Alert type="success">{success}</Alert>
@@ -229,43 +322,63 @@ export default function AttendanceReport() {
                     const active = selected?._id === session._id;
                     const expired =
                       new Date(session.expiresAt).getTime() < Date.now();
+
                     return (
-                      <button
+                      <div
                         key={session._id}
-                        type="button"
-                        onClick={() => {
-                          setSelected(session);
-                          setShowManual(false);
-                        }}
-                        className={`w-full rounded-xl border px-4 py-3 text-left transition ${
+                        className={`rounded-xl border px-4 py-3 transition ${
                           active
                             ? "border-indigo-200 bg-indigo-50"
                             : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
                         }`}
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-semibold text-slate-900">
-                              {session.course}
-                            </p>
-                            <p className="mt-1 text-xs text-slate-500">
-                              {formatSessionLabel(session)}
-                            </p>
-                            <p className="mt-1 text-xs text-slate-400">
-                              {new Date(session.createdAt).toLocaleString()}
-                            </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelected(session);
+                            setShowManual(false);
+                          }}
+                          className="w-full text-left"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-slate-900">
+                                {session.course}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                {formatSessionLabel(session)}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-400">
+                                {new Date(session.createdAt).toLocaleString()}
+                              </p>
+                            </div>
+
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                                expired
+                                  ? "bg-slate-100 text-slate-600"
+                                  : "bg-emerald-50 text-emerald-700"
+                              }`}
+                            >
+                              {expired ? "Ended" : "Live"}
+                            </span>
                           </div>
-                          <span
-                            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                              expired
-                                ? "bg-slate-100 text-slate-600"
-                                : "bg-emerald-50 text-emerald-700"
-                            }`}
+                        </button>
+
+                        <div className="mt-3">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSession(session._id)}
+                            disabled={deletingSessionId === session._id}
+                            className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50"
                           >
-                            {expired ? "Ended" : "Live"}
-                          </span>
+                            <MdDelete size={15} />
+                            {deletingSessionId === session._id
+                              ? "Deleting..."
+                              : "Delete Session"}
+                          </button>
                         </div>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -289,6 +402,7 @@ export default function AttendanceReport() {
                       {formatSessionLabel(selected)}
                     </p>
                   </div>
+
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -298,6 +412,7 @@ export default function AttendanceReport() {
                       <MdOutlineHistory size={16} />
                       Reload Records
                     </button>
+
                     <button
                       type="button"
                       onClick={openManualMark}
@@ -305,6 +420,18 @@ export default function AttendanceReport() {
                     >
                       <MdPersonAdd size={16} />
                       Manual Mark
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteSession(selected._id)}
+                      disabled={deletingSessionId === selected._id}
+                      className="inline-flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50"
+                    >
+                      <MdDelete size={16} />
+                      {deletingSessionId === selected._id
+                        ? "Deleting..."
+                        : "Delete Session"}
                     </button>
                   </div>
                 </div>
@@ -318,6 +445,7 @@ export default function AttendanceReport() {
                       {records.length}
                     </p>
                   </div>
+
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Status
@@ -328,6 +456,7 @@ export default function AttendanceReport() {
                         : "Live"}
                     </p>
                   </div>
+
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Session Token
@@ -371,41 +500,102 @@ export default function AttendanceReport() {
                               Semester
                             </th>
                             <th className="px-4 py-3 text-left font-semibold">
+                              Flags
+                            </th>
+                            <th className="px-4 py-3 text-left font-semibold">
                               Marked At
+                            </th>
+                            <th className="px-4 py-3 text-left font-semibold">
+                              Action
                             </th>
                           </tr>
                         </thead>
+
                         <tbody>
-                          {records.map((record, index) => (
-                            <tr
-                              key={record._id || index}
-                              className="border-t border-slate-200"
-                            >
-                              <td className="px-4 py-3 text-slate-600">
-                                {index + 1}
-                              </td>
-                              <td className="px-4 py-3 font-medium text-slate-900">
-                                {record?.student?.name || "Unknown"}
-                              </td>
-                              <td className="px-4 py-3 text-slate-700">
-                                {record?.student?.rollNo || "—"}
-                              </td>
-                              <td className="px-4 py-3 text-slate-700">
-                                {record?.student?.dept || "—"}
-                              </td>
-                              <td className="px-4 py-3 text-slate-700">
-                                {record?.student?.section || "—"}
-                              </td>
-                              <td className="px-4 py-3 text-slate-700">
-                                {record?.student?.semester || "—"}
-                              </td>
-                              <td className="px-4 py-3 text-slate-700">
-                                {new Date(
-                                  record?.markedAt || record?.createdAt,
-                                ).toLocaleString()}
-                              </td>
-                            </tr>
-                          ))}
+                          {records.map((record, index) => {
+                            const flagged =
+                              record?.proxyFlagged || record?.locationFlagged;
+
+                            return (
+                              <tr
+                                key={record._id || index}
+                                className="border-t border-slate-200"
+                              >
+                                <td className="px-4 py-3 text-slate-600">
+                                  {index + 1}
+                                </td>
+
+                                <td className="px-4 py-3 font-medium text-slate-900">
+                                  {record?.student?.name || "Unknown"}
+                                </td>
+
+                                <td className="px-4 py-3 text-slate-700">
+                                  {record?.student?.rollNo || "—"}
+                                </td>
+
+                                <td className="px-4 py-3 text-slate-700">
+                                  {record?.student?.dept || "—"}
+                                </td>
+
+                                <td className="px-4 py-3 text-slate-700">
+                                  {record?.student?.section || "—"}
+                                </td>
+
+                                <td className="px-4 py-3 text-slate-700">
+                                  {record?.student?.semester || "—"}
+                                </td>
+
+                                <td className="px-4 py-3">
+                                  <div className="flex flex-wrap gap-2">
+                                    {record?.proxyFlagged && (
+                                      <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600">
+                                        Proxy
+                                      </span>
+                                    )}
+
+                                    {record?.locationFlagged && (
+                                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                                        Outside Class
+                                      </span>
+                                    )}
+
+                                    {!record?.proxyFlagged &&
+                                      !record?.locationFlagged && (
+                                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                                          Clean
+                                        </span>
+                                      )}
+                                  </div>
+                                </td>
+
+                                <td className="px-4 py-3 text-slate-700">
+                                  {new Date(
+                                    record?.markedAt || record?.createdAt,
+                                  ).toLocaleString()}
+                                </td>
+
+                                <td className="px-4 py-3">
+                                  {flagged ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUnmark(record._id)}
+                                      disabled={unmarkingId === record._id}
+                                      className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50"
+                                    >
+                                      <MdWarning size={14} />
+                                      {unmarkingId === record._id
+                                        ? "Unmarking..."
+                                        : "Unmark"}
+                                    </button>
+                                  ) : (
+                                    <span className="text-xs text-slate-400">
+                                      —
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     )}
@@ -425,6 +615,7 @@ export default function AttendanceReport() {
                           className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 text-sm outline-none focus:border-indigo-500"
                         />
                       </div>
+
                       <button
                         type="button"
                         onClick={() => setShowManual(false)}
@@ -464,11 +655,13 @@ export default function AttendanceReport() {
                               </th>
                             </tr>
                           </thead>
+
                           <tbody>
                             {filteredStudents.map((student) => {
                               const alreadyPresent = markedIds.has(
                                 String(student._id),
                               );
+
                               return (
                                 <tr
                                   key={student._id}
@@ -477,12 +670,15 @@ export default function AttendanceReport() {
                                   <td className="px-4 py-3 font-medium text-slate-900">
                                     {student.name}
                                   </td>
+
                                   <td className="px-4 py-3 text-slate-700">
                                     {student.rollNo || "—"}
                                   </td>
+
                                   <td className="px-4 py-3 text-slate-700">
                                     {student.email || "—"}
                                   </td>
+
                                   <td className="px-4 py-3">
                                     {alreadyPresent ? (
                                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
@@ -496,6 +692,7 @@ export default function AttendanceReport() {
                                       </span>
                                     )}
                                   </td>
+
                                   <td className="px-4 py-3">
                                     <button
                                       type="button"

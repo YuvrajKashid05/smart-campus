@@ -1,10 +1,16 @@
 import { Router } from "express";
 import {
-    getDefaulters, getFraudReport, getFraudSummary,
-    getMyAttendanceSummary, getMySessions, getSessionRecords,
+    deleteSession,
+    getDefaulters,
+    getFraudReport,
+    getFraudSummary,
+    getMyAttendanceSummary,
+    getMySessions,
+    getSessionRecords,
     manualMarkAttendance,
     markAttendance,
     startSession,
+    unmarkAttendance,
 } from "../controllers/attendance.controller.js";
 import { requireAuth, requireRole } from "../middlewares/auth.middleware.js";
 import { attendanceLimiter, qrLimiter } from "../middlewares/rateLimiter.js";
@@ -14,7 +20,9 @@ const router = Router();
 // Faculty / Admin
 router.post("/start", requireAuth, requireRole("FACULTY","ADMIN"), qrLimiter, startSession);
 router.get( "/sessions", requireAuth, requireRole("FACULTY","ADMIN"), getMySessions);
-router.get( "/sessions/:sessionId/records", requireAuth, requireRole("FACULTY","ADMIN"), getSessionRecords);
+router.get("/sessions/:sessionId/records", requireAuth, requireRole("FACULTY", "ADMIN"), getSessionRecords);
+router.delete("/sessions/:sessionId",requireAuth,requireRole("FACULTY", "ADMIN"),deleteSession);
+router.delete("/sessions/:sessionId/records/:recordId",requireAuth,requireRole("FACULTY", "ADMIN"),unmarkAttendance);
 router.post("/sessions/:sessionId/manual-mark", requireAuth, requireRole("FACULTY","ADMIN"), manualMarkAttendance);
 router.get( "/defaulters", requireAuth, requireRole("FACULTY","ADMIN"), getDefaulters);
 router.get( "/sessions/:sessionId/fraud-report",requireAuth, requireRole("FACULTY","ADMIN"), getFraudReport);

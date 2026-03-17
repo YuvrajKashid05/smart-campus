@@ -47,6 +47,7 @@ const markSchema = z.object({
   deviceInfo: z.string().optional(),
 });
 
+//start session
 export async function startSession(req, res) {
   try {
     if (!req.user) {
@@ -136,7 +137,90 @@ export async function startSession(req, res) {
     return res.status(500).json({ ok: false, error: "Server error" });
   }
 }
+//delete session
+export async function deleteSession(req, res) {
+  try {
+    const { sessionId } = req.params;
 
+    const session = await AttendanceSession.findById(sessionId);
+    if (!session) {
+      return res.status(404).json({ ok: false, error: "Session not found" });
+    }
+
+    if (
+      req.user.role !== "ADMIN" &&
+      String(session.startedBy) !== String(req.user._id)
+    ) {
+      return res.status(403).json({ ok: false, error: "Forbidden" });
+    }
+
+    const deletedRecords = await AttendanceRecord.deleteMany({
+      session: session._id,
+    });
+
+    await AttendanceSession.findByIdAndDelete(session._id);
+
+    return res.json({
+      ok: true,
+      deleted: true,
+      sessionId,
+      deletedRecords: deletedRecords.deletedCount || 0,
+    });
+  } catch (err) {
+    console.error("DELETE SESSION ERROR:", err);
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+}
+
+//unmark attendace
+export async function unmarkAttendance(req, res) {
+  try {
+    const { sessionId, recordId } = req.params;
+
+    const session = await AttendanceSession.findById(sessionId);
+    if (!session) {
+      return res.status(404).json({ ok: false, error: "Session not found" });
+    }
+
+    if (
+      req.user.role !== "ADMIN" &&
+      String(session.startedBy) !== String(req.user._id)
+    ) {
+      return res.status(403).json({ ok: false, error: "Forbidden" });
+    }
+
+    const record = await AttendanceRecord.findOne({
+      _id: recordId,
+      session: sessionId,
+    }).populate("student", "name rollNo");
+
+    if (!record) {
+      return res
+        .status(404)
+        .json({ ok: false, error: "Attendance record not found" });
+    }
+
+    if (!record.proxyFlagged && !record.locationFlagged) {
+      return res.status(400).json({
+        ok: false,
+        error: "Only flagged attendance can be removed",
+      });
+    }
+
+    await AttendanceRecord.deleteOne({ _id: record._id });
+
+    return res.json({
+      ok: true,
+      deleted: true,
+      recordId,
+      student: record.student,
+    });
+  } catch (err) {
+    console.error("UNMARK ATTENDANCE ERROR:", err);
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+}
+//mark Attendace
 export async function markAttendance(req, res) {
   try {
     if (!req.user) {
